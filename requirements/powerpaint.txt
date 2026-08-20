@@ -1,0 +1,10 @@
+accelerate==1.8.1
+diffusers==0.27.0
+transformers==4.28.0
+huggingface-hub==0.25.2
+controlnet-aux==0.0.3
+gradio==3.41.0
+mmengine
+opencv-python
+safetensors
+pillow
