@@ -4,11 +4,13 @@ import os
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, Field
 
 from .asset_store import AssetStore
 from .case_memory import CaseMemory
 from .executor import TaskExecutor
+from .dashboard import DashboardService
 from .readiness import production_readiness
 from .schemas import ReviewDecision, TaskRequest
 from .task_store import TaskStore
@@ -54,6 +56,7 @@ def create_app(
             "RAG_DATABASE_PATH", root.parent / "memory" / "cases.sqlite3"
         )))
     executor = TaskExecutor(store, tools, memory=memory)
+    dashboard = DashboardService(store)
     app = FastAPI(title="Marketing Creative Agent", version="0.2.0")
 
     @app.on_event("shutdown")
@@ -73,6 +76,21 @@ def create_app(
             "toolset": toolset,
             "memory_enabled": memory is not None,
         }
+
+    @app.get("/dashboard", response_class=HTMLResponse)
+    def dashboard_index() -> str:
+        return dashboard.render_index()
+
+    @app.get("/dashboard/api/summary")
+    def dashboard_summary() -> dict[str, object]:
+        return dashboard.summary()
+
+    @app.get("/dashboard/tasks/{task_id}", response_class=HTMLResponse)
+    def dashboard_task(task_id: str) -> str:
+        try:
+            return dashboard.render_task(task_id)
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(status_code=404, detail="task not found") from exc
 
     @app.post("/assets", status_code=201)
     async def upload_asset(file: UploadFile = File(...)) -> dict[str, str | int]:
@@ -141,6 +159,14 @@ def create_app(
         if result is None:
             raise HTTPException(status_code=409, detail="task is not finished")
         return result
+
+    @app.get("/tasks/{task_id}/assets/{asset_id}")
+    def get_task_asset(task_id: str, asset_id: str) -> FileResponse:
+        try:
+            path = store.asset_path(task_id, asset_id)
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(status_code=404, detail="asset not found") from exc
+        return FileResponse(path)
 
     @app.post("/tasks/{task_id}/review", status_code=202)
     def review_task(task_id: str, review: HumanReviewRequest) -> dict[str, object]:

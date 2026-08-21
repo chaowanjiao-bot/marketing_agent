@@ -111,6 +111,34 @@ class TaskStore:
             raise KeyError(task_id)
         return path
 
+    def task_ids(self) -> list[str]:
+        tasks = [
+            path for path in self.root.iterdir()
+            if path.is_dir() and path.name.startswith("task_")
+            and "/" not in path.name and ".." not in path.name
+        ]
+        return [path.name for path in sorted(
+            tasks, key=lambda item: item.stat().st_mtime, reverse=True
+        )]
+
+    def asset_path(self, task_id: str, asset_id: str) -> Path:
+        if not asset_id.startswith("asset_") or "/" in asset_id or ".." in asset_id:
+            raise ValueError("invalid asset id")
+        result = self.result(task_id)
+        if result is None:
+            raise KeyError(asset_id)
+        asset = next(
+            (item for item in result.get("assets", []) if item.get("asset_id") == asset_id),
+            None,
+        )
+        if asset is None:
+            raise KeyError(asset_id)
+        path = Path(str(asset["file_path"])).resolve()
+        task_path = self.path(task_id).resolve()
+        if not path.is_file() or not path.is_relative_to(task_path):
+            raise KeyError(asset_id)
+        return path
+
     @staticmethod
     def _write_json(path: Path, payload: object) -> None:
         temporary = path.with_suffix(path.suffix + ".tmp")

@@ -83,7 +83,7 @@ cp .env.example .env
 PYTHONPATH="$PWD" runtime/venv/gpu/bin/python -m pytest -q tests
 ```
 
-当前测试基线：75 个测试通过。
+当前测试基线：79 个测试通过。
 
 ## 命令行运行
 
@@ -189,6 +189,29 @@ curl -X POST http://127.0.0.1:8000/tasks/TASK_ID/review \
 
 修订会归档上一轮结果、使用新种子重新执行，并再次进入审核点。默认最多修订 3 轮，
 可通过 `max_review_rounds` 调整。审核历史保存在结果的 `review_history` 字段中。
+
+### 实验与决策看板
+
+API 启动后访问：
+
+```text
+http://127.0.0.1:8000/dashboard
+```
+
+看板直接读取任务目录，提供任务状态、平均最佳分、待审核队列、各画幅最佳图、
+Top-K 候选对比和 Agent 决策轨迹。机器可读汇总接口为：
+
+```text
+GET /dashboard/api/summary
+```
+
+任务详情页：
+
+```text
+GET /dashboard/tasks/{task_id}
+```
+
+生成图通过受限资产接口展示，接口只允许读取对应任务目录内且已登记在结果中的文件。
 
 ## 当前限制
 
