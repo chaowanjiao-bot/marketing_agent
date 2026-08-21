@@ -7,12 +7,16 @@ from uuid import uuid4
 
 from .brief import MarketingInputInterpreter
 from .schemas import FinalResult, TaskRequest
+from .task_repository import SqliteTaskRepository
 
 
 class TaskStore:
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, metadata_path: Path | None = None) -> None:
         self.root = root
         self.root.mkdir(parents=True, exist_ok=True)
+        self.metadata = SqliteTaskRepository(
+            metadata_path or self.root.parent / "task_metadata.sqlite3"
+        )
 
     def create(self, request: TaskRequest) -> str:
         task_id = f"task_{uuid4().hex[:12]}"
@@ -21,16 +25,22 @@ class TaskStore:
             "inputs", "masks", "generations", "evaluations", "final", "provenance"
         ):
             (task_dir / name).mkdir(parents=True, exist_ok=True)
-        self._write_json(task_dir / "request.json", request.model_dump(mode="json"))
+        request_payload = request.model_dump(mode="json")
+        self._write_json(task_dir / "request.json", request_payload)
         brief = MarketingInputInterpreter().interpret(request.prompt, request.creativity)
         self._write_json(task_dir / "brief.json", brief.model_dump(mode="json"))
         self._write_json(task_dir / "status.json", {"status": "created"})
+        self.metadata.create(task_id, request_payload)
         return task_id
 
     def set_status(self, task_id: str, status: str, **details: object) -> None:
         payload: dict[str, object] = {"status": status}
         payload.update(details)
         self._write_json(self.path(task_id) / "status.json", payload)
+        self.metadata.update_status(
+            task_id, status, str(details.get("phase")) if details.get("phase") else None,
+            dict(details),
+        )
 
     def materialize_outputs(self, task_id: str, result: FinalResult) -> FinalResult:
         task_dir = self.path(task_id)
@@ -64,9 +74,9 @@ class TaskStore:
     def save_result(self, task_id: str, result: FinalResult) -> None:
         task_dir = self.path(task_id)
         self._write_json(task_dir / "result.json", result.model_dump(mode="json"))
-        self._write_json(
-            task_dir / "status.json",
-            {"status": result.status, "terminal_reason": result.terminal_reason},
+        self.set_status(
+            task_id, result.status, phase="finished",
+            terminal_reason=result.terminal_reason,
         )
         trace_path = task_dir / "trace.jsonl"
         with trace_path.open("w", encoding="utf-8") as handle:
@@ -82,9 +92,9 @@ class TaskStore:
         )
 
     def update_request(self, task_id: str, request: TaskRequest) -> None:
-        self._write_json(
-            self.path(task_id) / "request.json", request.model_dump(mode="json")
-        )
+        payload = request.model_dump(mode="json")
+        self._write_json(self.path(task_id) / "request.json", payload)
+        self.metadata.update_request(task_id, payload)
 
     def result_model(self, task_id: str) -> FinalResult | None:
         payload = self.result(task_id)
@@ -133,6 +143,15 @@ class TaskStore:
         return [path.name for path in sorted(
             tasks, key=lambda item: item.stat().st_mtime, reverse=True
         )]
+
+    def list_tasks(
+        self, *, status: str | None = None, limit: int = 50
+    ) -> list[dict[str, object]]:
+        return self.metadata.list(status=status, limit=limit)
+
+    def events(self, task_id: str) -> list[dict[str, object]]:
+        self.path(task_id)
+        return self.metadata.events(task_id)
 
     def asset_path(self, task_id: str, asset_id: str) -> Path:
         if not asset_id.startswith("asset_") or "/" in asset_id or ".." in asset_id:

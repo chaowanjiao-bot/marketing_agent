@@ -38,6 +38,26 @@ def test_create_and_read_task_result(tmp_path: Path) -> None:
         assert result.json()["terminal_reason"] == "quality_gate_passed"
 
 
+def test_list_tasks_and_read_status_events(tmp_path: Path) -> None:
+    with TestClient(create_app(task_root=tmp_path / "tasks")) as client:
+        created = client.post("/tasks", json={
+            "prompt": "Create a launch poster", "max_iterations": 8,
+        }).json()
+        task_id = created["task_id"]
+        for _ in range(100):
+            if client.get(f"/tasks/{task_id}").json()["status"] in {"completed", "failed"}:
+                break
+            time.sleep(0.01)
+        listing = client.get("/tasks", params={"limit": 10})
+        events = client.get(f"/tasks/{task_id}/events")
+
+    assert listing.status_code == 200
+    assert listing.json()["tasks"][0]["task_id"] == task_id
+    assert events.status_code == 200
+    assert events.json()["events"][0]["status"] == "created"
+    assert events.json()["events"][-1]["status"] == "completed"
+
+
 def test_upload_png(tmp_path: Path) -> None:
     with TestClient(create_app(task_root=tmp_path / "tasks")) as client:
         response = client.post(

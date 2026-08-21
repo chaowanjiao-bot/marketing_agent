@@ -52,7 +52,9 @@ def create_app(
     else:
         raise ValueError("AGENT_TOOLSET must be mock or production")
     root = task_root or Path(os.environ.get("TASK_ROOT", "runtime/tasks"))
-    store = TaskStore(root)
+    store = TaskStore(root, metadata_path=Path(os.environ.get(
+        "TASK_DATABASE_PATH", root.parent / "task_metadata.sqlite3"
+    )))
     assets = AssetStore(root.parent / "uploads")
     # RAG is opt-in. Merely starting the API must not create a database.
     if memory is None and os.environ.get("RAG_ENABLED", "false").lower() in {"1", "true", "yes"}:
@@ -98,6 +100,7 @@ def create_app(
                 else "signed" if provenance else "disabled"
             ),
             "runtime": tools.runtime_status(),
+            "task_database": str(store.metadata.path),
         }
 
     @app.get("/dashboard", response_class=HTMLResponse)
@@ -162,12 +165,27 @@ def create_app(
         executor.submit(task_id, request)
         return {"task_id": task_id, "status": "queued"}
 
+    @app.get("/tasks")
+    def list_tasks(status: str | None = None, limit: int = 50) -> dict[str, object]:
+        if limit < 1 or limit > 200:
+            raise HTTPException(status_code=400, detail="limit must be between 1 and 200")
+        tasks = store.list_tasks(status=status, limit=limit)
+        return {"count": len(tasks), "tasks": tasks}
+
     @app.get("/tasks/{task_id}")
     def get_task(task_id: str) -> dict[str, object]:
         try:
             return {"task_id": task_id, **store.status(task_id)}
         except (KeyError, ValueError) as exc:
             raise HTTPException(status_code=404, detail="task not found") from exc
+
+    @app.get("/tasks/{task_id}/events")
+    def get_task_events(task_id: str) -> dict[str, object]:
+        try:
+            events = store.events(task_id)
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(status_code=404, detail="task not found") from exc
+        return {"task_id": task_id, "count": len(events), "events": events}
     @app.delete("/tasks/{task_id}", status_code=202)
     def cancel_task(task_id: str) -> dict[str, str]:
         try:
