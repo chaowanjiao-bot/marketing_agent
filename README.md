@@ -83,7 +83,7 @@ cp .env.example .env
 PYTHONPATH="$PWD" runtime/venv/gpu/bin/python -m pytest -q tests
 ```
 
-当前测试基线：46 个测试通过。
+当前测试基线：63 个测试通过。
 
 ## 命令行运行
 
@@ -109,6 +109,29 @@ bash scripts/run_api.sh
 ```bash
 curl http://127.0.0.1:8000/health
 ```
+
+### 品牌规范与结构化文案
+
+任务可直接携带品牌档案，不需要预先创建品牌数据库。Agent 会把品牌色、调性、
+必显/禁用文案、视觉规则和素材逻辑 ID 注入每轮生成，并在结果中返回结构化文案。
+
+```json
+{
+  "prompt": "生成高端精华活动海报，标题《奢润新生》",
+  "generate_copy": true,
+  "brand_profile": {
+    "brand_id": "lumiere",
+    "name": "LUMIÈRE",
+    "tone": ["高端", "克制"],
+    "primary_colors": ["象牙白", "香槟金"],
+    "required_phrases": ["焕亮新生"],
+    "forbidden_phrases": ["全网最低"],
+    "visual_rules": ["品牌名只能出现一次"]
+  }
+}
+```
+
+不需要自动生成文案时传入 `"generate_copy": false`。
 
 ## 当前限制
 

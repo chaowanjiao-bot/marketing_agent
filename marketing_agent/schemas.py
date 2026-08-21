@@ -6,6 +6,8 @@ from typing import Any
 from uuid import uuid4
 
 from .brief import CreativityLevel
+from .brand import BrandProfile
+from .copy_agent import MarketingCopy
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -103,6 +105,8 @@ class TaskRequest(BaseModel):
     use_memory: bool | None = None
     memory_top_k: int = Field(default=3, ge=1, le=10)
     memory_context: str = Field(default="", exclude=True)
+    brand_profile: BrandProfile | None = None
+    generate_copy: bool = True
 
 
 class FinalResult(BaseModel):
@@ -121,3 +125,5 @@ class FinalResult(BaseModel):
     memory_used: bool = False
     retrieved_case_ids: list[str] = Field(default_factory=list)
     saved_case_id: str | None = None
+    marketing_copy: MarketingCopy | None = None
+    brand_id: str | None = None

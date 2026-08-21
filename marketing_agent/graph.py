@@ -4,6 +4,7 @@ from typing import Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 from .brief import CreativityLevel, MarketingBrief, MarketingInputInterpreter
+from .copy_agent import MarketingCopy, MarketingCopyAgent
 
 from .schemas import (
     AssetVersion,
@@ -41,6 +42,7 @@ class AgentState(TypedDict):
     best_compliant_asset_id: str | None
     best_compliant_score: float | None
     no_improvement_count: int
+    marketing_copy: MarketingCopy | None
 
 
 AMBIGUOUS_PHRASES = ("改好看", "优化一下", "随便改", "make it better")
@@ -103,12 +105,19 @@ def initial_state(request: TaskRequest) -> AgentState:
         "best_compliant_asset_id": None,
         "best_compliant_score": None,
         "no_improvement_count": 0,
+        "marketing_copy": None,
     }
 
 
 def understand_goal(state: AgentState) -> dict[str, Any]:
     request = state["request"]
     brief = MarketingInputInterpreter().interpret(request.prompt, request.creativity)
+    brand = request.brand_profile
+    if brand:
+        violations = brand.violations(request.prompt)
+        if violations:
+            raise ValueError("request contains forbidden brand phrases: " + ", ".join(violations))
+    marketing_copy = MarketingCopyAgent().create(brief, brand) if request.generate_copy else None
     low_creativity_needs_clarification = (
         request.creativity == CreativityLevel.LOW and bool(brief.ambiguities)
     )
@@ -139,9 +148,21 @@ def understand_goal(state: AgentState) -> dict[str, Any]:
         "goal": goal,
         "phase": "decide",
         "brief": brief,
+        "marketing_copy": marketing_copy,
         "trace": state["trace"]
         + [{"event": "goal_understood", "task_type": task_type.value}],
     }
+
+
+def generation_context(state: AgentState) -> str:
+    sections = [state["goal"].business_goal] if state["goal"] else []
+    if state["request"].brand_profile:
+        sections.append(state["request"].brand_profile.prompt_context())
+    if state["marketing_copy"]:
+        sections.append(state["marketing_copy"].prompt_context())
+    if state["request"].memory_context:
+        sections.append(state["request"].memory_context)
+    return "\n\n".join(section for section in sections if section)
 
 
 def decide(state: AgentState) -> dict[str, Any]:
@@ -170,9 +191,7 @@ def decide(state: AgentState) -> dict[str, Any]:
             if goal.task_type == TaskType.IMAGE_EDIT
             else "generate_image"
         )
-        generation_prompt = goal.business_goal
-        if state["request"].memory_context:
-            generation_prompt += "\n\n" + state["request"].memory_context
+        generation_prompt = generation_context(state)
         decision = Decision(
             type=DecisionType.CALL_TOOL,
             reason_summary=f"根据任务类型选择{tool_name}",
@@ -217,7 +236,7 @@ def decide(state: AgentState) -> dict[str, Any]:
             reason_summary="评估未通过，根据Observation重新执行修复",
             tool_name=tool_name,
             arguments={
-                "prompt": goal.business_goal + repair_instruction,
+                "prompt": generation_context(state) + repair_instruction,
                 "input_image": state["request"].input_image,
                 "attempt": state["generation_attempt"] + 1,
                 "target_expression": state["request"].target_expression,
@@ -409,4 +428,6 @@ def run_task(request: TaskRequest, registry: ToolRegistry | None = None) -> Fina
         best_aesthetic_score=state["best_aesthetic_score"],
         best_compliant_asset_id=state["best_compliant_asset_id"],
         best_compliant_score=state["best_compliant_score"],
+        marketing_copy=state["marketing_copy"],
+        brand_id=request.brand_profile.brand_id if request.brand_profile else None,
     )
