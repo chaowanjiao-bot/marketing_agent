@@ -1,4 +1,5 @@
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 
 from marketing_agent.schemas import TaskRequest
 from marketing_agent.task_store import TaskStore
@@ -29,3 +30,19 @@ def test_task_metadata_supports_status_filter(tmp_path: Path) -> None:
     completed = store.list_tasks(status="completed")
 
     assert [task["task_id"] for task in completed] == [first]
+
+
+def test_concurrent_repository_startup_is_migration_safe(tmp_path: Path) -> None:
+    path = tmp_path / "metadata.sqlite3"
+    # Create the pre-auth schema that requires both migration columns.
+    import sqlite3
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            """CREATE TABLE tasks (task_id TEXT PRIMARY KEY, status TEXT NOT NULL,
+            phase TEXT, prompt TEXT NOT NULL, request_json TEXT NOT NULL,
+            details_json TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL)"""
+        )
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        stores = list(pool.map(lambda _: TaskStore(tmp_path / "tasks", path), range(2)))
+    assert all(store.metadata.path == path for store in stores)

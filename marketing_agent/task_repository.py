@@ -57,9 +57,19 @@ class SqliteTaskRepository:
             """)
             columns = {row[1] for row in connection.execute("PRAGMA table_info(tasks)")}
             if "owner_id" not in columns:
-                connection.execute("ALTER TABLE tasks ADD COLUMN owner_id TEXT NOT NULL DEFAULT 'anonymous'")
+                try:
+                    connection.execute(
+                        "ALTER TABLE tasks ADD COLUMN owner_id TEXT NOT NULL DEFAULT 'anonymous'"
+                    )
+                except sqlite3.OperationalError as exc:
+                    if "duplicate column name" not in str(exc).lower():
+                        raise
             if "project_id" not in columns:
-                connection.execute("ALTER TABLE tasks ADD COLUMN project_id TEXT")
+                try:
+                    connection.execute("ALTER TABLE tasks ADD COLUMN project_id TEXT")
+                except sqlite3.OperationalError as exc:
+                    if "duplicate column name" not in str(exc).lower():
+                        raise
 
     def create(
         self, task_id: str, request: dict[str, Any], *, owner_id: str = "anonymous",

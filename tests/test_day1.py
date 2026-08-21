@@ -91,3 +91,11 @@ def test_max_iterations_aborts_safely():
     )
     assert result.status == "aborted"
     assert result.terminal_reason == "max_iterations_or_invalid_state"
+
+
+def test_success_on_last_allowed_iteration_finishes() -> None:
+    result = run_task(
+        TaskRequest(prompt="生成一张高级香水海报", max_iterations=4)
+    )
+    assert result.status == "completed"
+    assert result.terminal_reason == "quality_gate_passed"

@@ -15,6 +15,19 @@ def test_ocr_matching_accepts_combined_lines_and_detects_duplicate_brand():
     assert result["uniqueness"] == 0.0
 
 
+def test_ocr_parses_chinese_quotes_and_rejects_extra_punctuation():
+    expected = QwenVLOCREvaluator.expected_texts(
+        "标题『焕亮新生』，副标题『奢润修护精华』，品牌名LUMIÈRE仅出现一次"
+    )
+    result = QwenVLOCREvaluator.assess_texts(
+        expected, ["'焕亮新生，\n奢润修护精华", "LUMIÈRE"]
+    )
+    assert expected == ["焕亮新生", "奢润修护精华", "LUMIÈRE"]
+    assert result["missing"] == []
+    assert result["unexpected"] == "'，"
+    assert result["cleanliness"] == 0.0
+
+
 class Generator(AgentTool):
     name = "generate_image"
 

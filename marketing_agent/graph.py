@@ -188,6 +188,13 @@ def decide(state: AgentState) -> dict[str, Any]:
             type=DecisionType.ABORT,
             reason_summary="连续两轮评分没有显著提升，提前停止并保留最佳版本",
         )
+    elif state["phase"] == "finish":
+        # A successful evaluation consumes the last allowed tool iteration. Completion
+        # must win over the budget guard on the following decision node.
+        decision = Decision(
+            type=DecisionType.FINISH,
+            reason_summary="质量评估通过，任务完成",
+        )
     elif state["iteration"] >= state["request"].max_iterations:
         decision = Decision(
             type=DecisionType.ABORT,
@@ -271,11 +278,6 @@ def decide(state: AgentState) -> dict[str, Any]:
             },
             success_criteria=["修复评估器指出的问题"],
         )
-    elif state["phase"] == "finish":
-        decision = Decision(
-            type=DecisionType.FINISH,
-            reason_summary="质量评估通过，任务完成",
-        )
     else:
         decision = Decision(
             type=DecisionType.ABORT,
@@ -343,7 +345,11 @@ def make_execute_tool(registry: ToolRegistry):
             score = float(observation.metrics.get("marketing_alignment", 0.0))
             text_accuracy = observation.metrics.get("text_accuracy", 1.0)
             text_uniqueness = observation.metrics.get("text_uniqueness", 1.0)
-            compliant = text_accuracy >= 1.0 and text_uniqueness >= 1.0
+            text_cleanliness = observation.metrics.get("text_cleanliness", 1.0)
+            compliant = (
+                text_accuracy >= 1.0 and text_uniqueness >= 1.0
+                and text_cleanliness >= 1.0
+            )
             previous_aesthetic = state["best_aesthetic_score"]
             is_aesthetic_best = previous_aesthetic is None or score > previous_aesthetic
             previous_compliant = state["best_compliant_score"]
