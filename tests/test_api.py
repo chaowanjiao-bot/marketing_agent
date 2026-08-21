@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from marketing_agent.api import create_app
 from marketing_agent.case_memory import CaseMemory
 from marketing_agent.experience import ExperienceMemory
+from marketing_agent.provenance import ProvenanceService
 
 
 def test_health_lists_registered_tools(tmp_path: Path) -> None:
@@ -145,6 +146,19 @@ def test_experience_memory_is_opt_in(tmp_path: Path) -> None:
         enabled = client.get("/experience/strategies")
     assert enabled.status_code == 200
     assert enabled.json() == {"count": 0, "strategies": {}}
+
+
+def test_health_reports_c2pa_mode(tmp_path: Path) -> None:
+    with TestClient(create_app(task_root=tmp_path / "tasks")) as client:
+        disabled = client.get("/health").json()
+    assert disabled["c2pa_enabled"] is False
+    service = ProvenanceService(tmp_path / "signed_tasks", manifest_only=True)
+    with TestClient(create_app(
+        task_root=tmp_path / "signed_tasks", provenance=service,
+    )) as client:
+        enabled = client.get("/health").json()
+    assert enabled["c2pa_enabled"] is True
+    assert enabled["c2pa_mode"] == "manifest_only"
 
 
 def test_api_persists_multi_candidate_selection(tmp_path: Path) -> None:

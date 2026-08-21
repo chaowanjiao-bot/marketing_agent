@@ -6,6 +6,7 @@ from threading import Lock
 from .case_memory import CaseMemory, format_retrieval_context
 from .candidates import run_campaign_batch
 from .experience import ExperienceMemory
+from .provenance import ProvenanceService
 from .schemas import (
     FinalResult, ReviewDecision, ReviewRecord, ReviewStatus, TaskRequest,
 )
@@ -30,6 +31,7 @@ class TaskExecutor:
         self, store: TaskStore, registry: ToolRegistry, workers: int = 1,
         memory: CaseMemory | None = None,
         experience: ExperienceMemory | None = None,
+        provenance: ProvenanceService | None = None,
     ) -> None:
         if workers < 1:
             raise ValueError("workers must be positive")
@@ -40,6 +42,7 @@ class TaskExecutor:
         self.lock = Lock()
         self.memory = memory
         self.experience = experience
+        self.provenance = provenance
 
     def submit(
         self, task_id: str, request: TaskRequest,
@@ -108,6 +111,7 @@ class TaskExecutor:
                     }],
                 })
             else:
+                result = self._write_provenance(task_id, result)
                 result = self._write_memory(task_id, request, result)
                 result = self._write_experience(task_id, request, result)
             self.store.save_result(task_id, result)
@@ -154,6 +158,13 @@ class TaskExecutor:
         })
         return result.model_copy(update={"learned_experience_count": len(learned)})
 
+    def _write_provenance(self, task_id: str, result: FinalResult) -> FinalResult:
+        if self.provenance is None or result.provenance:
+            return result
+        result = self.provenance.process(task_id, result)
+        self.store.update_final_asset(task_id, result)
+        return result
+
     def review(
         self, task_id: str, decision: ReviewDecision, *, feedback: str = "",
         reviewer: str = "human",
@@ -184,6 +195,7 @@ class TaskExecutor:
                     "reviewer": reviewer,
                 }],
             })
+            approved = self._write_provenance(task_id, approved)
             approved = self._write_memory(task_id, request, approved)
             approved = self._write_experience(task_id, request, approved)
             self.store.save_result(task_id, approved)

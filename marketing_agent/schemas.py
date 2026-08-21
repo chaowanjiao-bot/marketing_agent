@@ -53,6 +53,14 @@ class ReviewRecord(BaseModel):
     decided_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
+class ProvenanceRecord(BaseModel):
+    asset_id: str
+    status: str
+    manifest_path: str
+    signed_asset_path: str | None = None
+    prompt_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
 class Constraint(BaseModel):
     name: str = Field(min_length=1)
     description: str = Field(min_length=1)
@@ -179,6 +187,8 @@ class FinalResult(BaseModel):
     review_history: list[ReviewRecord] = Field(default_factory=list)
     experience_used: bool = False
     learned_experience_count: int = 0
+    provenance: list[ProvenanceRecord] = Field(default_factory=list)
+    content_credentials_status: str = "not_enabled"
 
 
 class CandidateSummary(BaseModel):

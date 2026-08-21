@@ -17,7 +17,9 @@ class TaskStore:
     def create(self, request: TaskRequest) -> str:
         task_id = f"task_{uuid4().hex[:12]}"
         task_dir = self.root / task_id
-        for name in ("inputs", "masks", "generations", "evaluations", "final"):
+        for name in (
+            "inputs", "masks", "generations", "evaluations", "final", "provenance"
+        ):
             (task_dir / name).mkdir(parents=True, exist_ok=True)
         self._write_json(task_dir / "request.json", request.model_dump(mode="json"))
         brief = MarketingInputInterpreter().interpret(request.prompt, request.creativity)
@@ -98,6 +100,17 @@ class TaskStore:
             raise ValueError("review round is already archived")
         shutil.copy2(source, target)
         return target
+
+    def update_final_asset(self, task_id: str, result: FinalResult) -> None:
+        selected = next(
+            (asset for asset in result.assets if asset.asset_id == result.best_asset_id), None
+        )
+        if selected is None:
+            return
+        source = Path(selected.file_path)
+        if source.is_file():
+            target = self.path(task_id) / "final" / f"final{source.suffix}"
+            shutil.copy2(source, target)
 
     def result(self, task_id: str) -> dict[str, object] | None:
         path = self.path(task_id) / "result.json"

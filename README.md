@@ -83,7 +83,7 @@ cp .env.example .env
 PYTHONPATH="$PWD" runtime/venv/gpu/bin/python -m pytest -q tests
 ```
 
-当前测试基线：88 个测试通过。
+当前测试基线：94 个测试通过。
 
 ## 命令行运行
 
@@ -256,6 +256,40 @@ GET /experience/strategies
 
 任务结果中的 `experience_used` 表示本次是否采用历史策略，
 `learned_experience_count` 表示本次新增了多少条可统计经验。
+
+### C2PA 内容溯源
+
+文生图使用 `c2pa.created` 和 `trainedAlgorithmicMedia`；AI 局部编辑使用
+`c2pa.edited` 和 `compositedWithTrainedAlgorithmicMedia`。公开清单只包含 prompt 的
+SHA-256，不包含原始 prompt、私钥内容或私钥路径。
+
+仅生成内部清单、不签名：
+
+```bash
+C2PA_MANIFEST_ONLY=true
+```
+
+生成可验证 Content Credentials：
+
+```bash
+C2PA_ENABLED=true
+C2PATOOL_PATH=/usr/local/bin/c2patool
+C2PA_SIGN_CERT_PATH=privatecredentials/c2pa_sign_cert.pem
+C2PA_PRIVATE_KEY_PATH=privatecredentials/c2pa_private_key.pem
+C2PA_SIGNING_ALGORITHM=es256
+```
+
+签名模式要求使用可信 X.509 证书链。签名完成后系统会立即调用 `c2patool --info`
+验证；失败时删除签名输出并令任务失败。官方工具内置的测试证书不得用于生产。
+人工审核任务只有批准后才执行 provenance 流程。
+
+任务结果通过 `content_credentials_status` 明确区分：
+
+- `not_enabled`
+- `manifest_only`
+- `signed_and_verified`
+
+每个渠道最佳资产的 manifest 和签名路径记录在 `provenance` 字段中。
 
 ## 当前限制
 

@@ -11,6 +11,7 @@ from .asset_store import AssetStore
 from .case_memory import CaseMemory
 from .executor import TaskExecutor
 from .experience import ExperienceMemory, JsonlExperienceStore
+from .provenance import ProvenanceService, build_provenance_service
 from .dashboard import DashboardService
 from .readiness import production_readiness
 from .schemas import ReviewDecision, TaskRequest
@@ -37,6 +38,7 @@ def create_app(
     *, registry: ToolRegistry | None = None, task_root: Path | None = None,
     memory: CaseMemory | None = None,
     experience: ExperienceMemory | None = None,
+    provenance: ProvenanceService | None = None,
 ) -> FastAPI:
     toolset = "custom" if registry is not None else os.environ.get("AGENT_TOOLSET", "mock")
     if registry is not None:
@@ -63,7 +65,11 @@ def create_app(
         experience = ExperienceMemory(JsonlExperienceStore(Path(os.environ.get(
             "EXPERIENCE_MEMORY_PATH", root.parent / "memory" / "experience.jsonl"
         ))))
-    executor = TaskExecutor(store, tools, memory=memory, experience=experience)
+    if provenance is None:
+        provenance = build_provenance_service(root)
+    executor = TaskExecutor(
+        store, tools, memory=memory, experience=experience, provenance=provenance
+    )
     dashboard = DashboardService(store)
     app = FastAPI(title="Marketing Creative Agent", version="0.2.0")
 
@@ -86,6 +92,11 @@ def create_app(
             "memory_enabled": memory is not None,
             "experience_memory_enabled": experience is not None,
             "experience_count": experience.count() if experience else 0,
+            "c2pa_enabled": provenance is not None,
+            "c2pa_mode": (
+                "manifest_only" if provenance and provenance.manifest_only
+                else "signed" if provenance else "disabled"
+            ),
             "runtime": tools.runtime_status(),
         }
 
