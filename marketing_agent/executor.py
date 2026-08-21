@@ -5,6 +5,7 @@ from threading import Lock
 
 from .case_memory import CaseMemory, format_retrieval_context
 from .candidates import run_campaign_batch
+from .experience import ExperienceMemory
 from .schemas import (
     FinalResult, ReviewDecision, ReviewRecord, ReviewStatus, TaskRequest,
 )
@@ -28,6 +29,7 @@ class TaskExecutor:
     def __init__(
         self, store: TaskStore, registry: ToolRegistry, workers: int = 1,
         memory: CaseMemory | None = None,
+        experience: ExperienceMemory | None = None,
     ) -> None:
         if workers < 1:
             raise ValueError("workers must be positive")
@@ -37,6 +39,7 @@ class TaskExecutor:
         self.futures: dict[str, Future[None]] = {}
         self.lock = Lock()
         self.memory = memory
+        self.experience = experience
 
     def submit(
         self, task_id: str, request: TaskRequest,
@@ -71,11 +74,16 @@ class TaskExecutor:
                 request = request.model_copy(
                     update={"memory_context": format_retrieval_context(retrieved)}
                 )
+            if self.experience is not None:
+                request = request.model_copy(update={
+                    "experience_strategies": self.experience.strategies()
+                })
             result = run_campaign_batch(request, registry=self.registry)
             retrieved_ids = [str(case["case_id"]) for case in retrieved]
             result = result.model_copy(update={
                 "memory_used": bool(retrieved),
                 "retrieved_case_ids": retrieved_ids,
+                "experience_used": bool(request.experience_strategies),
                 "trace": [{
                     "event": "memory_retrieval",
                     "used": bool(retrieved),
@@ -101,6 +109,7 @@ class TaskExecutor:
                 })
             else:
                 result = self._write_memory(task_id, request, result)
+                result = self._write_experience(task_id, request, result)
             self.store.save_result(task_id, result)
         except Exception as exc:
             code, retryable = classify_error(exc)
@@ -134,6 +143,17 @@ class TaskExecutor:
         )
         return result.model_copy(update={"saved_case_id": saved_case_id})
 
+    def _write_experience(
+        self, task_id: str, request: TaskRequest, result: FinalResult
+    ) -> FinalResult:
+        if self.experience is None or result.learned_experience_count:
+            return result
+        learned = self.experience.learn_from_trace(result.trace, metadata={
+            "task_id": task_id, "brand_id": result.brand_id,
+            "review_round": request.review_round,
+        })
+        return result.model_copy(update={"learned_experience_count": len(learned)})
+
     def review(
         self, task_id: str, decision: ReviewDecision, *, feedback: str = "",
         reviewer: str = "human",
@@ -165,6 +185,7 @@ class TaskExecutor:
                 }],
             })
             approved = self._write_memory(task_id, request, approved)
+            approved = self._write_experience(task_id, request, approved)
             self.store.save_result(task_id, approved)
             return {"task_id": task_id, "status": "completed", "review_round": request.review_round}
         if not normalized_feedback:

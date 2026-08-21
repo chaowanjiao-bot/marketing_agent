@@ -141,6 +141,7 @@ class TaskRequest(BaseModel):
     review_round: int = Field(default=0, ge=0, le=20)
     max_review_rounds: int = Field(default=3, ge=1, le=20)
     review_feedback: str = Field(default="", max_length=2000)
+    experience_strategies: dict[str, list[str]] = Field(default_factory=dict, exclude=True)
 
     @model_validator(mode="after")
     def validate_output_formats(self) -> "TaskRequest":
@@ -176,6 +177,8 @@ class FinalResult(BaseModel):
     review_status: ReviewStatus = ReviewStatus.NOT_REQUIRED
     review_round: int = 0
     review_history: list[ReviewRecord] = Field(default_factory=list)
+    experience_used: bool = False
+    learned_experience_count: int = 0
 
 
 class CandidateSummary(BaseModel):

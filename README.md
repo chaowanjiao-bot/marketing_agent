@@ -83,7 +83,7 @@ cp .env.example .env
 PYTHONPATH="$PWD" runtime/venv/gpu/bin/python -m pytest -q tests
 ```
 
-当前测试基线：83 个测试通过。
+当前测试基线：88 个测试通过。
 
 ## 命令行运行
 
@@ -234,6 +234,28 @@ GPU_MAX_CONCURRENT=1
 ```bash
 MODEL_WORKER_MODE=oneshot
 ```
+
+### 历史经验学习与策略记忆
+
+策略记忆记录“低分维度 → 修复动作 → 分数变化”，区别于保存成品参考的案例 RAG。
+只有带来有效提升的动作会进入后续推荐；失败动作只用于统计。人工审核任务在批准前
+不会学习。
+
+默认关闭且不会创建文件。需要跨任务持久化时启用：
+
+```bash
+EXPERIENCE_MEMORY_ENABLED=true
+EXPERIENCE_MEMORY_PATH=runtime/memory/experience.jsonl
+```
+
+查看当前累计经验和推荐策略：
+
+```text
+GET /experience/strategies
+```
+
+任务结果中的 `experience_used` 表示本次是否采用历史策略，
+`learned_experience_count` 表示本次新增了多少条可统计经验。
 
 ## 当前限制
 

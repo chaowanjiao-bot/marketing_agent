@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from marketing_agent.api import create_app
 from marketing_agent.case_memory import CaseMemory
+from marketing_agent.experience import ExperienceMemory
 
 
 def test_health_lists_registered_tools(tmp_path: Path) -> None:
@@ -128,6 +129,22 @@ def test_rag_is_disabled_without_explicit_configuration(tmp_path: Path) -> None:
     assert health.json()["memory_enabled"] is False
     assert search.status_code == 503
     assert not (tmp_path / "memory").exists()
+
+
+def test_experience_memory_is_opt_in(tmp_path: Path) -> None:
+    with TestClient(create_app(task_root=tmp_path / "tasks")) as client:
+        disabled = client.get("/experience/strategies")
+        health = client.get("/health")
+    assert disabled.status_code == 503
+    assert health.json()["experience_memory_enabled"] is False
+
+    experience = ExperienceMemory()
+    with TestClient(create_app(
+        task_root=tmp_path / "enabled_tasks", experience=experience,
+    )) as client:
+        enabled = client.get("/experience/strategies")
+    assert enabled.status_code == 200
+    assert enabled.json() == {"count": 0, "strategies": {}}
 
 
 def test_api_persists_multi_candidate_selection(tmp_path: Path) -> None:

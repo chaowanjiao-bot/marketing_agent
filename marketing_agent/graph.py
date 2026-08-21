@@ -79,8 +79,14 @@ def generation_seed(attempt: int, base_seed: int = BASE_SEED) -> int:
     return base_seed + max(attempt - 1, 0) * SEED_STRIDE
 
 
-def repair_actions_for(observation: Observation) -> list[str]:
-    concrete = [REPAIR_INSTRUCTIONS[name] for name in observation.issues if name in REPAIR_INSTRUCTIONS]
+def repair_actions_for(
+    observation: Observation, learned: dict[str, list[str]] | None = None
+) -> list[str]:
+    learned = learned or {}
+    concrete = [
+        learned[name][0] if learned.get(name) else REPAIR_INSTRUCTIONS[name]
+        for name in observation.issues if learned.get(name) or name in REPAIR_INSTRUCTIONS
+    ]
     return concrete or list(observation.recommended_actions) or ["提升主体清晰度、版式层级和品牌一致性"]
 
 
@@ -234,7 +240,9 @@ def decide(state: AgentState) -> dict[str, Any]:
         )
     elif state["phase"] == "replan":
         latest_observation = state["observations"][-1]
-        repair_actions = repair_actions_for(latest_observation)
+        repair_actions = repair_actions_for(
+            latest_observation, state["request"].experience_strategies
+        )
         repair_instruction = (
             "；改进建议：" + "；".join(repair_actions) if repair_actions else "；提升营销对齐质量"
         )
@@ -304,6 +312,11 @@ def make_execute_tool(registry: ToolRegistry):
                     "tool": observation.tool_name,
                     "status": observation.status.value,
                     "issues": observation.issues,
+                    "metrics": observation.metrics,
+                    "repair_actions": repair_actions_for(
+                        observation, state["request"].experience_strategies
+                    ) if decision.tool_name == "evaluate_image" else [],
+                    "output_format": state["request"].output_formats[0].value,
                 }
             ],
         }
