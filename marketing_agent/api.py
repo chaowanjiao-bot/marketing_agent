@@ -16,6 +16,7 @@ from .dashboard import DashboardService
 from .readiness import production_readiness
 from .schemas import ReviewDecision, TaskRequest
 from .task_store import TaskStore
+from .task_queue import DurableTaskQueue
 from .tools import ToolRegistry, build_default_registry
 
 
@@ -69,8 +70,15 @@ def create_app(
         ))))
     if provenance is None:
         provenance = build_provenance_service(root)
+    execution_mode = os.environ.get("TASK_EXECUTION_MODE", "inline").lower()
+    if execution_mode not in {"inline", "external"}:
+        raise ValueError("TASK_EXECUTION_MODE must be inline or external")
+    queue = DurableTaskQueue(Path(os.environ.get(
+        "TASK_QUEUE_PATH", root.parent / "task_queue.sqlite3"
+    ))) if execution_mode == "external" else None
     executor = TaskExecutor(
-        store, tools, memory=memory, experience=experience, provenance=provenance
+        store, tools, memory=memory, experience=experience, provenance=provenance,
+        queue=queue,
     )
     dashboard = DashboardService(store)
     app = FastAPI(title="Marketing Creative Agent", version="0.2.0")
@@ -101,6 +109,8 @@ def create_app(
             ),
             "runtime": tools.runtime_status(),
             "task_database": str(store.metadata.path),
+            "execution_mode": execution_mode,
+            "queue": queue.stats() if queue else None,
         }
 
     @app.get("/dashboard", response_class=HTMLResponse)

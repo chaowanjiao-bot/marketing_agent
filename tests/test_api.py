@@ -58,6 +58,18 @@ def test_list_tasks_and_read_status_events(tmp_path: Path) -> None:
     assert events.json()["events"][-1]["status"] == "completed"
 
 
+def test_external_execution_mode_only_enqueues(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("TASK_EXECUTION_MODE", "external")
+    with TestClient(create_app(task_root=tmp_path / "tasks")) as client:
+        created = client.post("/tasks", json={"prompt": "Queued campaign"}).json()
+        status = client.get(f"/tasks/{created['task_id']}").json()
+        health = client.get("/health").json()
+
+    assert status["status"] == "queued"
+    assert health["execution_mode"] == "external"
+    assert health["queue"]["queued"] == 1
+
+
 def test_upload_png(tmp_path: Path) -> None:
     with TestClient(create_app(task_root=tmp_path / "tasks")) as client:
         response = client.post(

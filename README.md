@@ -291,10 +291,41 @@ C2PA_SIGNING_ALGORITHM=es256
 
 每个渠道最佳资产的 manifest 和签名路径记录在 `provenance` 字段中。
 
+### 持久化任务队列与独立 Worker
+
+开发模式默认由 API 进程内执行任务。生产部署应让 API 只负责入队：
+
+```bash
+TASK_EXECUTION_MODE=external
+TASK_DATABASE_PATH=runtime/task_metadata.sqlite3
+TASK_QUEUE_PATH=runtime/task_queue.sqlite3
+```
+
+使用相同的环境变量启动独立 Worker：
+
+```bash
+python -m marketing_agent.worker
+```
+
+队列使用 SQLite WAL 和原子领取，API 重启不会丢失排队任务。Worker 异常退出后，
+超过 `WORKER_STALE_SECONDS`（默认 3600 秒）的运行中任务会在新 Worker 启动时重新入队。
+多个 Worker 可以共享队列，但每个 GPU Worker 应配置独立的 `CUDA_VISIBLE_DEVICES`。
+
+状态和队列接口：
+
+```text
+GET /tasks
+GET /tasks/{task_id}/events
+GET /health
+```
+
+`/health` 中的 `queue` 返回 queued、running、completed、failed 和 cancelled 数量。
+未来切换 Redis 时只需替换队列适配器，Agent 执行代码和 API 合同无需变化。
+
 ## 当前限制
 
-- Qwen-Image 与 Qwen2.5-VL 每次任务重新加载，首轮延迟较高。
-- OCR 与 VQA 目前顺序执行，后续应改为常驻模型 worker。
+- 开启 `QWEN_UNLOAD_AFTER_GENERATE=true` 会减少显存占用，但多轮生成需要重新加载 Qwen。
+- SQLite 队列适合单机部署；多服务器部署应切换 Redis 或其他集中式消息队列。
 - 扩散模型无法保证每次生成的文字完全正确，OCR 负责检测但不保证修复成功。
 - PowerPaint 只应用于图生图/局部编辑任务，文生图失败时默认重新生成。
 

@@ -11,6 +11,7 @@ from .schemas import (
     FinalResult, ReviewDecision, ReviewRecord, ReviewStatus, TaskRequest,
 )
 from .task_store import TaskStore
+from .task_queue import DurableTaskQueue
 from .tools import ToolRegistry
 
 
@@ -32,6 +33,7 @@ class TaskExecutor:
         memory: CaseMemory | None = None,
         experience: ExperienceMemory | None = None,
         provenance: ProvenanceService | None = None,
+        queue: DurableTaskQueue | None = None,
     ) -> None:
         if workers < 1:
             raise ValueError("workers must be positive")
@@ -43,18 +45,30 @@ class TaskExecutor:
         self.memory = memory
         self.experience = experience
         self.provenance = provenance
+        self.queue = queue
 
     def submit(
         self, task_id: str, request: TaskRequest,
         review_history: list[ReviewRecord] | None = None,
     ) -> None:
         self.store.set_status(task_id, "queued", phase="waiting_for_worker")
+        if self.queue is not None:
+            self.queue.enqueue(task_id, {
+                "request": request.model_dump(mode="json"),
+                "review_history": [item.model_dump(mode="json") for item in (review_history or [])],
+            })
+            return
         future = self.pool.submit(self._execute, task_id, request, review_history or [])
         with self.lock:
             self.futures[task_id] = future
 
     def cancel(self, task_id: str) -> bool:
         self.store.path(task_id)
+        if self.queue is not None:
+            cancelled = self.queue.cancel(task_id)
+            if cancelled:
+                self.store.set_status(task_id, "cancelled", phase="cancelled_before_start")
+            return cancelled
         with self.lock:
             future = self.futures.get(task_id)
         if future is None or not future.cancel():
@@ -125,6 +139,12 @@ class TaskExecutor:
                 error_code=code,
                 retryable=retryable,
             )
+
+    def execute_now(
+        self, task_id: str, request: TaskRequest,
+        review_history: list[ReviewRecord] | None = None,
+    ) -> None:
+        self._execute(task_id, request, review_history or [])
 
     def _write_memory(
         self, task_id: str, request: TaskRequest, result: FinalResult
