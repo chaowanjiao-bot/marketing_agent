@@ -170,12 +170,15 @@ def decide(state: AgentState) -> dict[str, Any]:
             if goal.task_type == TaskType.IMAGE_EDIT
             else "generate_image"
         )
+        generation_prompt = goal.business_goal
+        if state["request"].memory_context:
+            generation_prompt += "\n\n" + state["request"].memory_context
         decision = Decision(
             type=DecisionType.CALL_TOOL,
             reason_summary=f"根据任务类型选择{tool_name}",
             tool_name=tool_name,
             arguments={
-                "prompt": goal.business_goal,
+                "prompt": generation_prompt,
                 "input_image": state["request"].input_image,
                 "target_expression": state["request"].target_expression,
                 "attempt": state["generation_attempt"] + 1,

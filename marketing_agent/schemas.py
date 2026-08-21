@@ -100,6 +100,9 @@ class TaskRequest(BaseModel):
     creativity: CreativityLevel = CreativityLevel.MEDIUM
     max_iterations: int = Field(default=4, ge=1, le=20)
     input_asset_id: str | None = None
+    use_memory: bool | None = None
+    memory_top_k: int = Field(default=3, ge=1, le=10)
+    memory_context: str = Field(default="", exclude=True)
 
 
 class FinalResult(BaseModel):
@@ -115,3 +118,6 @@ class FinalResult(BaseModel):
     best_aesthetic_score: float | None = None
     best_compliant_asset_id: str | None = None
     best_compliant_score: float | None = None
+    memory_used: bool = False
+    retrieved_case_ids: list[str] = Field(default_factory=list)
+    saved_case_id: str | None = None

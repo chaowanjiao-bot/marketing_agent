@@ -2,6 +2,7 @@ import time
 from pathlib import Path
 
 from marketing_agent.executor import TaskExecutor
+from marketing_agent.case_memory import CaseMemory
 from marketing_agent.schemas import TaskRequest
 from marketing_agent.task_store import TaskStore
 from marketing_agent.tools import (
@@ -51,4 +52,25 @@ def test_executor_cancels_a_queued_task(tmp_path: Path) -> None:
     assert executor.cancel(second_id)
     assert store.status(second_id)["status"] == "cancelled"
     assert store.status(second_id)["phase"] == "cancelled_before_start"
+    executor.shutdown()
+
+
+def test_executor_retrieves_and_writes_back_case(tmp_path: Path) -> None:
+    store = TaskStore(tmp_path / "tasks")
+    memory = CaseMemory(tmp_path / "memory.sqlite3")
+    seed_id = memory.add(prompt="高端香水广告海报", enhanced_prompt="黑金棚拍构图", score=0.9)
+    request = TaskRequest(prompt="生成高端香水营销海报", max_iterations=8)
+    task_id = store.create(request)
+    executor = TaskExecutor(store, build_default_registry(), memory=memory)
+    executor.submit(task_id, request)
+    for _ in range(100):
+        if store.status(task_id)["status"] in {"completed", "failed"}:
+            break
+        time.sleep(0.01)
+    result = store.result(task_id)
+    assert result is not None
+    assert result["memory_used"] is True
+    assert seed_id in result["retrieved_case_ids"]
+    assert result["saved_case_id"].startswith("case_")
+    assert memory.count() == 2
     executor.shutdown()

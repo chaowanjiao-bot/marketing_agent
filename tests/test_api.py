@@ -4,6 +4,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from marketing_agent.api import create_app
+from marketing_agent.case_memory import CaseMemory
 
 
 def test_health_lists_registered_tools(tmp_path: Path) -> None:
@@ -105,3 +106,25 @@ def test_task_rejects_unknown_asset_and_raw_server_path(tmp_path: Path) -> None:
 def test_missing_task_is_404(tmp_path: Path) -> None:
     with TestClient(create_app(task_root=tmp_path / "tasks")) as client:
         assert client.get("/tasks/task_missing").status_code == 404
+
+
+def test_seed_and_search_case_memory(tmp_path: Path) -> None:
+    memory = CaseMemory(tmp_path / "explicit_test_memory.sqlite3")
+    with TestClient(create_app(task_root=tmp_path / "tasks", memory=memory)) as client:
+        created = client.post("/memory/cases", json={
+            "prompt": "高端护肤精华广告", "enhanced_prompt": "香槟金棚拍",
+            "score": 0.92, "compliant": True,
+        })
+        searched = client.get("/memory/search", params={"query": "护肤精华海报"})
+    assert created.status_code == 201
+    assert searched.status_code == 200
+    assert searched.json()["cases"][0]["case_id"] == created.json()["case_id"]
+
+
+def test_rag_is_disabled_without_explicit_configuration(tmp_path: Path) -> None:
+    with TestClient(create_app(task_root=tmp_path / "tasks")) as client:
+        health = client.get("/health")
+        search = client.get("/memory/search", params={"query": "护肤海报"})
+    assert health.json()["memory_enabled"] is False
+    assert search.status_code == 503
+    assert not (tmp_path / "memory").exists()

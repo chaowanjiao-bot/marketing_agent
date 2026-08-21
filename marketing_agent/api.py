@@ -4,8 +4,10 @@ import os
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from pydantic import BaseModel, Field
 
 from .asset_store import AssetStore
+from .case_memory import CaseMemory
 from .executor import TaskExecutor
 from .readiness import production_readiness
 from .schemas import TaskRequest
@@ -13,8 +15,18 @@ from .task_store import TaskStore
 from .tools import ToolRegistry, build_default_registry
 
 
+class SeedCaseRequest(BaseModel):
+    prompt: str = Field(min_length=3)
+    enhanced_prompt: str = ""
+    asset_path: str | None = None
+    score: float | None = Field(default=None, ge=0.0, le=1.0)
+    compliant: bool = False
+    metadata: dict[str, object] = Field(default_factory=dict)
+
+
 def create_app(
-    *, registry: ToolRegistry | None = None, task_root: Path | None = None
+    *, registry: ToolRegistry | None = None, task_root: Path | None = None,
+    memory: CaseMemory | None = None,
 ) -> FastAPI:
     toolset = "custom" if registry is not None else os.environ.get("AGENT_TOOLSET", "mock")
     if registry is not None:
@@ -30,7 +42,12 @@ def create_app(
     root = task_root or Path(os.environ.get("TASK_ROOT", "runtime/tasks"))
     store = TaskStore(root)
     assets = AssetStore(root.parent / "uploads")
-    executor = TaskExecutor(store, tools)
+    # RAG is opt-in. Merely starting the API must not create a database.
+    if memory is None and os.environ.get("RAG_ENABLED", "false").lower() in {"1", "true", "yes"}:
+        memory = CaseMemory(Path(os.environ.get(
+            "RAG_DATABASE_PATH", root.parent / "memory" / "cases.sqlite3"
+        )))
+    executor = TaskExecutor(store, tools, memory=memory)
     app = FastAPI(title="Marketing Creative Agent", version="0.2.0")
 
     @app.on_event("shutdown")
@@ -48,6 +65,7 @@ def create_app(
             "production_ready": all(components.values()),
             "components": components,
             "toolset": toolset,
+            "memory_enabled": memory is not None,
         }
 
     @app.post("/assets", status_code=201)
@@ -57,6 +75,23 @@ def create_app(
             return assets.save(content_type=file.content_type or "", data=data)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/memory/cases", status_code=201)
+    def add_seed_case(case: SeedCaseRequest) -> dict[str, str]:
+        if memory is None:
+            raise HTTPException(status_code=503, detail="RAG memory is not configured")
+        case_id = memory.add(source="seed", **case.model_dump())
+        return {"case_id": case_id, "status": "active"}
+
+    @app.get("/memory/search")
+    def search_memory(query: str, limit: int = 3) -> dict[str, object]:
+        if memory is None:
+            raise HTTPException(status_code=503, detail="RAG memory is not configured")
+        try:
+            cases = memory.search(query, limit=limit)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"query": query, "count": len(cases), "cases": cases}
 
     @app.post("/tasks", status_code=202)
     def create_task(request: TaskRequest) -> dict[str, object]:
