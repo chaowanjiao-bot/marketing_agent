@@ -361,6 +361,30 @@ POST /projects
 
 认证开启时，全局研发看板和共享记忆管理接口默认禁用，避免跨用户数据泄露。
 
+### 生产部署
+
+复制并检查生产配置：
+
+```bash
+cp deploy/production.env.example deploy/production.env
+deploy/manage.sh start
+deploy/manage.sh status
+```
+
+停止或重启：
+
+```bash
+deploy/manage.sh stop
+deploy/manage.sh restart
+```
+
+脚本分别启动 API 和独立 GPU Worker，保存 PID 与日志，等待 `/health` 通过后才报告成功；
+停止时会校验 PID 对应的命令，避免误杀其他进程。真实 `production.env` 已被 Git 忽略。
+
+长期运行可以执行 `deploy/render_systemd.sh` 生成 systemd unit，人工检查后再安装。
+`deploy/nginx.conf.example` 提供 HTTPS 反向代理模板。启用 HTTPS 后应把
+`AUTH_SECURE_COOKIE` 改为 `true`。
+
 ## 当前限制
 
 - 开启 `QWEN_UNLOAD_AFTER_GENERATE=true` 会减少显存占用，但多轮生成需要重新加载 Qwen。

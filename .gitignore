@@ -1,4 +1,6 @@
 .env
+deploy/production.env
+deploy/rendered/
 .DS_Store
 .vscode/
 .idea/

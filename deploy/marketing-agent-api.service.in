@@ -1,0 +1,13 @@
+[Unit]
+Description=Marketing Creative Agent API
+After=network.target
+[Service]
+Type=simple
+WorkingDirectory=__PROJECT_DIR__
+EnvironmentFile=__ENV_FILE__
+ExecStart=__PROJECT_DIR__/deploy/manage.sh run-api
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+[Install]
+WantedBy=multi-user.target
