@@ -5,7 +5,9 @@ from threading import Lock
 
 from .case_memory import CaseMemory, format_retrieval_context
 from .candidates import run_campaign_batch
-from .schemas import TaskRequest
+from .schemas import (
+    FinalResult, ReviewDecision, ReviewRecord, ReviewStatus, TaskRequest,
+)
 from .task_store import TaskStore
 from .tools import ToolRegistry
 
@@ -36,9 +38,12 @@ class TaskExecutor:
         self.lock = Lock()
         self.memory = memory
 
-    def submit(self, task_id: str, request: TaskRequest) -> None:
+    def submit(
+        self, task_id: str, request: TaskRequest,
+        review_history: list[ReviewRecord] | None = None,
+    ) -> None:
         self.store.set_status(task_id, "queued", phase="waiting_for_worker")
-        future = self.pool.submit(self._execute, task_id, request)
+        future = self.pool.submit(self._execute, task_id, request, review_history or [])
         with self.lock:
             self.futures[task_id] = future
 
@@ -51,7 +56,9 @@ class TaskExecutor:
         self.store.set_status(task_id, "cancelled", phase="cancelled_before_start")
         return True
 
-    def _execute(self, task_id: str, request: TaskRequest) -> None:
+    def _execute(
+        self, task_id: str, request: TaskRequest, review_history: list[ReviewRecord]
+    ) -> None:
         self.store.set_status(task_id, "running", phase="agent_execution")
         try:
             retrieved: list[dict[str, object]] = []
@@ -77,22 +84,23 @@ class TaskExecutor:
                 }] + result.trace,
             })
             result = self.store.materialize_outputs(task_id, result)
-            if self.memory is not None and result.assets:
-                best = next(
-                    (asset for asset in result.assets if asset.asset_id == result.best_asset_id),
-                    result.assets[-1],
-                )
-                compliant = result.best_compliant_asset_id == best.asset_id
-                saved_case_id = self.memory.add(
-                    prompt=request.prompt,
-                    enhanced_prompt=best.prompt,
-                    asset_path=best.file_path,
-                    score=result.best_score,
-                    compliant=compliant,
-                    source="generated",
-                    metadata={"task_id": task_id, "terminal_reason": result.terminal_reason},
-                )
-                result = result.model_copy(update={"saved_case_id": saved_case_id})
+            result = result.model_copy(update={
+                "review_round": request.review_round,
+                "review_history": review_history,
+            })
+            if request.review_required and result.assets:
+                result = result.model_copy(update={
+                    "status": "waiting_for_review",
+                    "terminal_reason": "human_review_required",
+                    "review_status": ReviewStatus.WAITING,
+                    "trace": result.trace + [{
+                        "event": "human_review_requested",
+                        "round": request.review_round,
+                        "best_asset_id": result.best_asset_id,
+                    }],
+                })
+            else:
+                result = self._write_memory(task_id, request, result)
             self.store.save_result(task_id, result)
         except Exception as exc:
             code, retryable = classify_error(exc)
@@ -104,6 +112,79 @@ class TaskExecutor:
                 error_code=code,
                 retryable=retryable,
             )
+
+    def _write_memory(
+        self, task_id: str, request: TaskRequest, result: FinalResult
+    ) -> FinalResult:
+        if self.memory is None or not result.assets or result.saved_case_id:
+            return result
+        best = next(
+            (asset for asset in result.assets if asset.asset_id == result.best_asset_id),
+            result.assets[-1],
+        )
+        compliant = result.best_compliant_asset_id == best.asset_id
+        saved_case_id = self.memory.add(
+            prompt=request.prompt,
+            enhanced_prompt=best.prompt,
+            asset_path=best.file_path,
+            score=result.best_score,
+            compliant=compliant,
+            source="generated",
+            metadata={"task_id": task_id, "terminal_reason": result.terminal_reason},
+        )
+        return result.model_copy(update={"saved_case_id": saved_case_id})
+
+    def review(
+        self, task_id: str, decision: ReviewDecision, *, feedback: str = "",
+        reviewer: str = "human",
+    ) -> dict[str, object]:
+        with self.lock:
+            status = self.store.status(task_id)
+            if status.get("status") != "waiting_for_review":
+                raise ValueError("task is not waiting for review")
+            self.store.set_status(task_id, "review_processing", phase="human_review")
+        result = self.store.result_model(task_id)
+        if result is None:
+            raise RuntimeError("review result is missing")
+        request = self.store.request(task_id)
+        normalized_feedback = " ".join(feedback.split())
+        record = ReviewRecord(
+            round=request.review_round, decision=decision,
+            feedback=normalized_feedback, reviewer=reviewer,
+        )
+        history = result.review_history + [record]
+        if decision == ReviewDecision.APPROVE:
+            approved = result.model_copy(update={
+                "status": "completed",
+                "terminal_reason": "human_review_approved",
+                "review_status": ReviewStatus.APPROVED,
+                "review_history": history,
+                "trace": result.trace + [{
+                    "event": "human_review_approved", "round": request.review_round,
+                    "reviewer": reviewer,
+                }],
+            })
+            approved = self._write_memory(task_id, request, approved)
+            self.store.save_result(task_id, approved)
+            return {"task_id": task_id, "status": "completed", "review_round": request.review_round}
+        if not normalized_feedback:
+            self.store.set_status(task_id, "waiting_for_review", phase="human_review")
+            raise ValueError("revision feedback is required")
+        if request.review_round >= request.max_review_rounds:
+            self.store.set_status(task_id, "waiting_for_review", phase="human_review")
+            raise ValueError("maximum review rounds reached")
+        self.store.archive_result(task_id, request.review_round)
+        revised_request = request.model_copy(update={
+            "review_round": request.review_round + 1,
+            "review_feedback": normalized_feedback,
+            "seed": request.seed + 97_409,
+        })
+        self.store.update_request(task_id, revised_request)
+        self.submit(task_id, revised_request, history)
+        return {
+            "task_id": task_id, "status": "queued",
+            "review_round": revised_request.review_round,
+        }
 
     def shutdown(self) -> None:
         self.pool.shutdown(wait=False, cancel_futures=True)

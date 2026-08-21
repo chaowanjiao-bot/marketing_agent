@@ -174,3 +174,36 @@ def test_api_returns_one_selected_asset_per_output_format(tmp_path: Path) -> Non
     assert {(asset["width"], asset["height"]) for asset in result["assets"]} == {
         (1024, 1024), (1024, 1280), (768, 1360), (1360, 768),
     }
+
+
+def test_api_human_review_revision_and_approval(tmp_path: Path) -> None:
+    with TestClient(create_app(task_root=tmp_path / "tasks")) as client:
+        created = client.post("/tasks", json={
+            "prompt": "生成高端口红活动海报", "review_required": True,
+            "max_iterations": 8,
+        })
+        task_id = created.json()["task_id"]
+        for _ in range(200):
+            status = client.get(f"/tasks/{task_id}").json()["status"]
+            if status in {"waiting_for_review", "failed"}:
+                break
+            time.sleep(0.01)
+        assert status == "waiting_for_review"
+        revised = client.post(f"/tasks/{task_id}/review", json={
+            "decision": "revise", "feedback": "口红主体放大，减少背景装饰",
+            "reviewer": "creative_lead",
+        })
+        assert revised.status_code == 202
+        for _ in range(200):
+            status = client.get(f"/tasks/{task_id}").json()["status"]
+            if status in {"waiting_for_review", "failed"}:
+                break
+            time.sleep(0.01)
+        approved = client.post(f"/tasks/{task_id}/review", json={
+            "decision": "approve", "reviewer": "creative_lead",
+        })
+        result = client.get(f"/tasks/{task_id}/result").json()
+    assert approved.status_code == 202
+    assert result["status"] == "completed"
+    assert result["review_status"] == "approved"
+    assert [item["decision"] for item in result["review_history"]] == ["revise", "approve"]

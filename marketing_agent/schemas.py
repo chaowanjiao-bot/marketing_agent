@@ -33,6 +33,26 @@ class ObservationStatus(str, Enum):
     PARTIAL = "partial"
 
 
+class ReviewStatus(str, Enum):
+    NOT_REQUIRED = "not_required"
+    WAITING = "waiting_for_review"
+    APPROVED = "approved"
+    REVISION_REQUESTED = "revision_requested"
+
+
+class ReviewDecision(str, Enum):
+    APPROVE = "approve"
+    REVISE = "revise"
+
+
+class ReviewRecord(BaseModel):
+    round: int = Field(ge=0)
+    decision: ReviewDecision
+    feedback: str = ""
+    reviewer: str = "human"
+    decided_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
 class Constraint(BaseModel):
     name: str = Field(min_length=1)
     description: str = Field(min_length=1)
@@ -117,6 +137,10 @@ class TaskRequest(BaseModel):
     output_formats: list[OutputFormat] = Field(
         default_factory=lambda: [OutputFormat.SQUARE], min_length=1, max_length=4
     )
+    review_required: bool = False
+    review_round: int = Field(default=0, ge=0, le=20)
+    max_review_rounds: int = Field(default=3, ge=1, le=20)
+    review_feedback: str = Field(default="", max_length=2000)
 
     @model_validator(mode="after")
     def validate_output_formats(self) -> "TaskRequest":
@@ -149,6 +173,9 @@ class FinalResult(BaseModel):
     selected_candidate_index: int = 0
     format_summaries: list["FormatSummary"] = Field(default_factory=list)
     primary_output_format: OutputFormat = OutputFormat.SQUARE
+    review_status: ReviewStatus = ReviewStatus.NOT_REQUIRED
+    review_round: int = 0
+    review_history: list[ReviewRecord] = Field(default_factory=list)
 
 
 class CandidateSummary(BaseModel):

@@ -83,7 +83,7 @@ cp .env.example .env
 PYTHONPATH="$PWD" runtime/venv/gpu/bin/python -m pytest -q tests
 ```
 
-当前测试基线：71 个测试通过。
+当前测试基线：75 个测试通过。
 
 ## 命令行运行
 
@@ -165,6 +165,30 @@ GPU 模式建议保持 `parallel_candidates=false`，避免多个扩散模型同
 
 以上请求会运行 4 个画幅 × 2 个候选。当前多尺寸仅支持文生图任务；图像编辑仍保持
 原图尺寸，防止 PowerPaint 在未重排版时产生拉伸结果。
+
+### 人工审核与恢复执行
+
+提交任务时设置 `"review_required": true`，Agent 完成候选选择后会进入
+`waiting_for_review`。预览结果已经持久化，但批准前不会写入案例记忆。
+
+批准交付：
+
+```bash
+curl -X POST http://127.0.0.1:8000/tasks/TASK_ID/review \
+  -H 'Content-Type: application/json' \
+  -d '{"decision":"approve","reviewer":"creative_lead"}'
+```
+
+带反馈修订：
+
+```bash
+curl -X POST http://127.0.0.1:8000/tasks/TASK_ID/review \
+  -H 'Content-Type: application/json' \
+  -d '{"decision":"revise","feedback":"产品放大到画面高度55%，标题上移"}'
+```
+
+修订会归档上一轮结果、使用新种子重新执行，并再次进入审核点。默认最多修订 3 轮，
+可通过 `max_review_rounds` 调整。审核历史保存在结果的 `review_history` 字段中。
 
 ## 当前限制
 

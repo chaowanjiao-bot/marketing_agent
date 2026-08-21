@@ -10,7 +10,7 @@ from .asset_store import AssetStore
 from .case_memory import CaseMemory
 from .executor import TaskExecutor
 from .readiness import production_readiness
-from .schemas import TaskRequest
+from .schemas import ReviewDecision, TaskRequest
 from .task_store import TaskStore
 from .tools import ToolRegistry, build_default_registry
 
@@ -22,6 +22,12 @@ class SeedCaseRequest(BaseModel):
     score: float | None = Field(default=None, ge=0.0, le=1.0)
     compliant: bool = False
     metadata: dict[str, object] = Field(default_factory=dict)
+
+
+class HumanReviewRequest(BaseModel):
+    decision: ReviewDecision
+    feedback: str = Field(default="", max_length=2000)
+    reviewer: str = Field(default="human", min_length=1, max_length=100)
 
 
 def create_app(
@@ -135,6 +141,18 @@ def create_app(
         if result is None:
             raise HTTPException(status_code=409, detail="task is not finished")
         return result
+
+    @app.post("/tasks/{task_id}/review", status_code=202)
+    def review_task(task_id: str, review: HumanReviewRequest) -> dict[str, object]:
+        try:
+            return executor.review(
+                task_id, review.decision, feedback=review.feedback,
+                reviewer=review.reviewer,
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="task not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     return app
 

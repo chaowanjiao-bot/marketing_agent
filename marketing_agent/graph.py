@@ -163,6 +163,11 @@ def generation_context(state: AgentState) -> str:
         sections.append(state["marketing_copy"].prompt_context())
     if state["request"].memory_context:
         sections.append(state["request"].memory_context)
+    if state["request"].review_feedback:
+        sections.append(
+            "人工审核修订要求（必须执行，且不得破坏其他已满足约束）："
+            + state["request"].review_feedback
+        )
     sections.append(get_format_spec(state["request"].output_formats[0]).prompt_context())
     return "\n\n".join(section for section in sections if section)
 

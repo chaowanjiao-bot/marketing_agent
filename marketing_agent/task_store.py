@@ -33,7 +33,7 @@ class TaskStore:
     def materialize_outputs(self, task_id: str, result: FinalResult) -> FinalResult:
         task_dir = self.path(task_id)
         assets = []
-        latest_output: Path | None = None
+        materialized_by_id: dict[str, Path] = {}
         for index, asset in enumerate(result.assets, start=1):
             source = Path(asset.file_path)
             if source.is_file():
@@ -43,11 +43,12 @@ class TaskStore:
                 if source.resolve() != target.resolve():
                     shutil.copy2(source, target)
                 asset = asset.model_copy(update={"file_path": str(target)})
-                latest_output = target
+                materialized_by_id[asset.asset_id] = target
             assets.append(asset)
-        if latest_output is not None:
+        selected_output = materialized_by_id.get(result.best_asset_id or "")
+        if selected_output is not None:
             shutil.copy2(
-                latest_output, task_dir / "final" / f"final{latest_output.suffix}"
+                selected_output, task_dir / "final" / f"final{selected_output.suffix}"
             )
         for observation in result.observations:
             mask_path = observation.outputs.get("mask_path")
@@ -72,6 +73,31 @@ class TaskStore:
 
     def status(self, task_id: str) -> dict[str, object]:
         return self._read_json(self.path(task_id) / "status.json")
+
+    def request(self, task_id: str) -> TaskRequest:
+        return TaskRequest.model_validate(
+            self._read_json(self.path(task_id) / "request.json")
+        )
+
+    def update_request(self, task_id: str, request: TaskRequest) -> None:
+        self._write_json(
+            self.path(task_id) / "request.json", request.model_dump(mode="json")
+        )
+
+    def result_model(self, task_id: str) -> FinalResult | None:
+        payload = self.result(task_id)
+        return FinalResult.model_validate(payload) if payload is not None else None
+
+    def archive_result(self, task_id: str, review_round: int) -> Path:
+        task_dir = self.path(task_id)
+        source = task_dir / "result.json"
+        if not source.is_file():
+            raise KeyError("task result is missing")
+        target = task_dir / f"result.review_{review_round}.json"
+        if target.exists():
+            raise ValueError("review round is already archived")
+        shutil.copy2(source, target)
+        return target
 
     def result(self, task_id: str) -> dict[str, object] | None:
         path = self.path(task_id) / "result.json"
