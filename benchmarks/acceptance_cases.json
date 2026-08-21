@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "serum_text_precision",
+      "tags": ["smoke", "text", "product"],
+      "prompt": "为高端修护精华制作一张1:1新品营销海报。产品瓶必须是唯一视觉主体，象牙白和香槟金配色，顶部准确显示标题『焕亮新生』，标题下准确显示副标题『奢润修护精华』，瓶身品牌名LUMIÈRE仅出现一次，不要生成任何其他文字，棚拍质感，构图克制高级。",
+      "seed": 20260822,
+      "max_iterations": 4
+    },
+    {
+      "id": "perfume_single_subject",
+      "tags": ["smoke", "subject", "product"],
+      "prompt": "制作一张1:1高端香水新品海报。画面只有一瓶透明玻璃香水作为明确主体，深黑背景配少量金色轮廓光，禁止出现人物、第二个瓶子和无关装饰，顶部标题『夜幕鎏金』，除标题外不要出现任何文字。",
+      "seed": 20260823,
+      "max_iterations": 4
+    },
+    {
+      "id": "lipstick_composition",
+      "tags": ["smoke", "composition", "product"],
+      "prompt": "生成一张1:1奢华口红广告。唯一主体是一支打开的正红色口红，位于画面中央偏下，勃艮第红背景，柔和聚光灯，顶部保留充足留白并准确写『一抹倾心』，不要出现其他文字、人物或其他产品。",
+      "seed": 20260824,
+      "max_iterations": 4
+    },
+    {
+      "id": "coffee_pack_brand",
+      "tags": ["text", "brand", "package"],
+      "prompt": "为精品咖啡豆制作1:1电商主图。唯一主体是一只哑光白咖啡袋，正面品牌名NORTH仅出现一次，标题准确显示『晨光拼配』，暖棕色影棚背景，不要出现其他文字、杯子、咖啡机或第二个包装。",
+      "seed": 20260825,
+      "max_iterations": 4
+    },
+    {
+      "id": "headphones_clean_layout",
+      "tags": ["layout", "electronics"],
+      "prompt": "制作1:1无线耳机新品海报。唯一主体是一副银色头戴式耳机，浅灰渐变背景，标题『静听未来』准确位于顶部中央，产品不得遮挡文字，除标题外无任何文字、图标或其他物体，现代极简科技美学。",
+      "seed": 20260826,
+      "max_iterations": 4
+    },
+    {
+      "id": "sunscreen_no_extra_text",
+      "tags": ["text", "product"],
+      "prompt": "生成1:1防晒霜夏日营销海报。唯一主体是一支白色防晒软管，天空蓝背景与自然日光，顶部准确显示『轻透无感』，软管品牌名SOLARA仅出现一次，不要生成任何其他文字、数字、人物或第二件产品。",
+      "seed": 20260827,
+      "max_iterations": 4
+    },
+    {
+      "id": "watch_material_quality",
+      "tags": ["aesthetic", "material", "luxury"],
+      "prompt": "制作1:1高级腕表广告。唯一主体是一枚精钢机械腕表，黑色石材台面，冷调轮廓光，金属与玻璃材质真实精致，构图克制，禁止出现文字、人物、首饰或第二枚腕表。",
+      "seed": 20260828,
+      "max_iterations": 4
+    },
+    {
+      "id": "tea_package_chinese",
+      "tags": ["text", "package"],
+      "prompt": "生成1:1东方茶叶礼盒海报。唯一主体是一只墨绿色方形礼盒，盒面准确写『云岭春茶』且只出现一次，米白背景，柔和自然阴影，现代东方美学，不要出现其他文字、茶具、茶叶或第二个礼盒。",
+      "seed": 20260829,
+      "max_iterations": 4
+    },
+    {
+      "id": "shoe_dynamic_subject",
+      "tags": ["subject", "sports"],
+      "prompt": "制作1:1跑鞋新品广告。唯一主体是一只橙黑配色跑鞋，以轻微悬浮姿态居中，深灰运动感背景，鞋体结构清晰完整，顶部标题准确写『破风而行』，不要出现人物、第二只鞋或其他文字。",
+      "seed": 20260830,
+      "max_iterations": 4
+    },
+    {
+      "id": "candle_minimal_scene",
+      "tags": ["composition", "lifestyle"],
+      "prompt": "生成1:1香氛蜡烛海报。唯一主体是一只点燃的琥珀色玻璃蜡烛，暖白极简背景，柔和真实火焰与阴影，顶部准确显示『静谧时刻』，不得出现其他文字、植物、书籍或第二只蜡烛。",
+      "seed": 20260831,
+      "max_iterations": 4
+    }
+  ]
+}

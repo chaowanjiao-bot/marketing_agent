@@ -236,6 +236,24 @@ GPU_MAX_CONCURRENT=1
 MODEL_WORKER_MODE=persistent
 ```
 
+### 生产验收基准
+
+`benchmarks/acceptance_cases.json` 提供 10 条固定营销生成案例，覆盖精确文字、
+单一主体、品牌唯一性、构图、材质和多类产品。验收脚本通过正式登录、任务队列、
+Worker、结果接口运行完整用户链路，并汇总通过率、耗时、自动修复次数和失败原因。
+
+先运行 3 条 smoke 案例：
+
+```bash
+export ACCEPTANCE_EMAIL='acceptance@example.test'
+export ACCEPTANCE_PASSWORD='replace-with-a-test-secret'
+python scripts/run_acceptance.py --tag smoke \
+  --report runtime/acceptance_smoke_report.json
+```
+
+不指定 `--tag` 时运行全部案例。还可使用 `--case-id serum_text_precision` 做单例复现。
+密码只从环境变量读取，不会写入报告或代码仓库。
+
 ### 历史经验学习与策略记忆
 
 策略记忆记录“低分维度 → 修复动作 → 分数变化”，区别于保存成品参考的案例 RAG。
