@@ -1,0 +1,4 @@
+.account{border:1px solid var(--line);background:white;border-radius:20px;padding:6px 12px;color:var(--green)}
+.auth-gate{position:fixed;inset:0;z-index:20;background:rgba(25,33,29,.48);backdrop-filter:blur(9px);display:grid;place-items:center;padding:20px}
+.auth-card{width:min(420px,100%);background:var(--paper);border-radius:20px;padding:32px;box-shadow:0 30px 80px rgba(0,0,0,.25)}
+.auth-card>.brand-mark{margin-bottom:18px}.auth-card h2{font:500 30px Georgia,"Songti SC",serif;margin:7px 0}.auth-card>p{color:var(--muted)}.auth-card .text-button{color:var(--green)}

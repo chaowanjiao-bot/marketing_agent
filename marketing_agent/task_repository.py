@@ -55,16 +55,26 @@ class SqliteTaskRepository:
                 CREATE INDEX IF NOT EXISTS idx_task_events_task_id
                     ON task_events(task_id, event_id);
             """)
+            columns = {row[1] for row in connection.execute("PRAGMA table_info(tasks)")}
+            if "owner_id" not in columns:
+                connection.execute("ALTER TABLE tasks ADD COLUMN owner_id TEXT NOT NULL DEFAULT 'anonymous'")
+            if "project_id" not in columns:
+                connection.execute("ALTER TABLE tasks ADD COLUMN project_id TEXT")
 
-    def create(self, task_id: str, request: dict[str, Any]) -> None:
+    def create(
+        self, task_id: str, request: dict[str, Any], *, owner_id: str = "anonymous",
+        project_id: str | None = None,
+    ) -> None:
         timestamp = _now()
         request_json = json.dumps(request, ensure_ascii=False)
         with self._connect() as connection:
             connection.execute(
                 """INSERT INTO tasks
-                   (task_id, status, phase, prompt, request_json, created_at, updated_at)
-                   VALUES (?, 'created', 'created', ?, ?, ?, ?)""",
-                (task_id, str(request.get("prompt", "")), request_json, timestamp, timestamp),
+                   (task_id, status, phase, prompt, request_json, created_at, updated_at,
+                    owner_id, project_id)
+                   VALUES (?, 'created', 'created', ?, ?, ?, ?, ?, ?)""",
+                (task_id, str(request.get("prompt", "")), request_json, timestamp, timestamp,
+                 owner_id, project_id),
             )
             connection.execute(
                 """INSERT INTO task_events
@@ -100,17 +110,38 @@ class SqliteTaskRepository:
                 (str(request.get("prompt", "")), json.dumps(request, ensure_ascii=False), _now(), task_id),
             )
 
-    def list(self, *, status: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
+    def list(
+        self, *, status: str | None = None, limit: int = 50,
+        owner_id: str | None = None, project_id: str | None = None,
+    ) -> list[dict[str, Any]]:
         query = "SELECT * FROM tasks"
         parameters: list[Any] = []
+        clauses = []
         if status:
-            query += " WHERE status=?"
+            clauses.append("status=?")
             parameters.append(status)
+        if owner_id is not None:
+            clauses.append("owner_id=?")
+            parameters.append(owner_id)
+        if project_id is not None:
+            clauses.append("project_id=?")
+            parameters.append(project_id)
+        if clauses:
+            query += " WHERE " + " AND ".join(clauses)
         query += " ORDER BY updated_at DESC LIMIT ?"
         parameters.append(limit)
         with self._connect() as connection:
             rows = connection.execute(query, parameters).fetchall()
         return [self._task_row(row) for row in rows]
+
+    def owner(self, task_id: str) -> str:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT owner_id FROM tasks WHERE task_id=?", (task_id,)
+            ).fetchone()
+        if row is None:
+            raise KeyError(task_id)
+        return str(row["owner_id"])
 
     def events(self, task_id: str) -> list[dict[str, Any]]:
         with self._connect() as connection:
@@ -137,4 +168,5 @@ class SqliteTaskRepository:
             "phase": row["phase"], "prompt": row["prompt"],
             "details": json.loads(row["details_json"]),
             "created_at": row["created_at"], "updated_at": row["updated_at"],
+            "project_id": row["project_id"],
         }

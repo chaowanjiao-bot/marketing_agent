@@ -129,6 +129,7 @@ class BudgetState(BaseModel):
 
 class TaskRequest(BaseModel):
     prompt: str = Field(min_length=3)
+    project_id: str | None = Field(default=None, pattern=r"^project_[0-9a-f]{12}$")
     input_image: str | None = None
     target_expression: str | None = None
     creativity: CreativityLevel = CreativityLevel.MEDIUM

@@ -18,7 +18,7 @@ class TaskStore:
             metadata_path or self.root.parent / "task_metadata.sqlite3"
         )
 
-    def create(self, request: TaskRequest) -> str:
+    def create(self, request: TaskRequest, *, owner_id: str = "anonymous") -> str:
         task_id = f"task_{uuid4().hex[:12]}"
         task_dir = self.root / task_id
         for name in (
@@ -30,7 +30,9 @@ class TaskStore:
         brief = MarketingInputInterpreter().interpret(request.prompt, request.creativity)
         self._write_json(task_dir / "brief.json", brief.model_dump(mode="json"))
         self._write_json(task_dir / "status.json", {"status": "created"})
-        self.metadata.create(task_id, request_payload)
+        self.metadata.create(
+            task_id, request_payload, owner_id=owner_id, project_id=request.project_id
+        )
         return task_id
 
     def set_status(self, task_id: str, status: str, **details: object) -> None:
@@ -145,9 +147,17 @@ class TaskStore:
         )]
 
     def list_tasks(
-        self, *, status: str | None = None, limit: int = 50
+        self, *, status: str | None = None, limit: int = 50,
+        owner_id: str | None = None, project_id: str | None = None,
     ) -> list[dict[str, object]]:
-        return self.metadata.list(status=status, limit=limit)
+        return self.metadata.list(
+            status=status, limit=limit, owner_id=owner_id, project_id=project_id
+        )
+
+    def authorize(self, task_id: str, owner_id: str) -> None:
+        self.path(task_id)
+        if self.metadata.owner(task_id) != owner_id:
+            raise KeyError(task_id)
 
     def events(self, task_id: str) -> list[dict[str, object]]:
         self.path(task_id)

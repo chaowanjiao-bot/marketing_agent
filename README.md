@@ -334,6 +334,33 @@ Web 工作台支持填写营销需求和品牌规则、上传产品图、选择�
 查看任务状态与执行事件、预览和下载生成结果，以及批准或提交人工修改意见。
 根路径 `/` 会自动跳转到工作台；研发与实验看板仍保留在 `/dashboard`。
 
+### 用户、项目与数据隔离
+
+开发环境默认关闭认证。面向真实用户部署时启用：
+
+```bash
+AUTH_ENABLED=true
+AUTH_DATABASE_PATH=runtime/accounts.sqlite3
+AUTH_SECURE_COOKIE=true  # 仅在 HTTPS 入口下开启
+```
+
+开启后，Web 工作台提供注册、登录和退出；注册会自动创建默认项目。密码使用带独立随机盐的
+PBKDF2-SHA256 保存，登录凭据存放在 HttpOnly、SameSite=Strict Cookie 中。任务、上传素材、
+执行事件、结果和下载接口全部校验资源所有者，其他用户访问时统一返回 404。
+
+认证接口：
+
+```text
+POST /auth/register
+POST /auth/login
+POST /auth/logout
+GET  /auth/me
+GET  /projects
+POST /projects
+```
+
+认证开启时，全局研发看板和共享记忆管理接口默认禁用，避免跨用户数据泄露。
+
 ## 当前限制
 
 - 开启 `QWEN_UNLOAD_AFTER_GENERATE=true` 会减少显存占用，但多轮生成需要重新加载 Qwen。

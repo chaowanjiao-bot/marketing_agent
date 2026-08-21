@@ -5,12 +5,13 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Marketing Agent</title>
   <link rel="stylesheet" href="/app/static/styles.css">
+  <link rel="stylesheet" href="/app/static/auth.css">
 </head>
 <body>
   <header class="topbar">
     <div class="brand-mark">M</div>
     <div><strong>Marketing Agent</strong><small>AI 营销创意工作台</small></div>
-    <span id="serviceState" class="status-pill">连接中</span>
+    <span id="serviceState" class="status-pill">连接中</span><button id="accountButton" class="account hidden"></button>
   </header>
   <main>
     <section class="hero">
@@ -21,6 +22,7 @@
       <section class="panel form-panel">
         <div class="panel-title"><span>01</span><div><h2>创建营销任务</h2><p>描述产品、目标和必须遵守的规则</p></div></div>
         <form id="taskForm">
+          <label id="projectField" class="hidden">所属项目<select id="projectSelect"></select></label>
           <label>营销需求<textarea id="prompt" required minlength="3" placeholder="例如：为高端修护精华制作新品海报。标题“焕亮新生”，副标题“奢润修护精华”，象牙白和香槟金配色，产品瓶为视觉中心。"></textarea></label>
           <div class="grid-two">
             <label>品牌名称<input id="brandName" placeholder="例如 LUMIÈRE"></label>
@@ -67,6 +69,13 @@
     </div>
     <section class="history"><div class="history-head"><div><span class="eyebrow">HISTORY</span><h2>最近任务</h2></div><button id="refreshHistory" class="secondary small">刷新</button></div><div id="historyList" class="history-list"></div></section>
   </main>
+  <div id="authGate" class="auth-gate hidden"><section class="auth-card">
+    <div class="brand-mark">M</div><span class="eyebrow">WELCOME</span><h2>登录创意工作台</h2>
+    <p>每位用户拥有独立的项目、素材与生成结果。</p>
+    <form id="authForm"><label id="nameField" class="hidden">姓名<input id="authName" autocomplete="name"></label><label>邮箱<input id="authEmail" type="email" required autocomplete="email"></label><label>密码<input id="authPassword" type="password" required minlength="10" autocomplete="current-password"></label><button class="primary" type="submit"><span id="authSubmitText">登录</span><span>→</span></button></form>
+    <p id="authError" class="error"></p><button id="authMode" class="text-button">没有账户？立即注册</button>
+  </section></div>
   <script src="/app/static/app.js" defer></script>
+  <script src="/app/static/auth.js" defer></script>
 </body>
 </html>
