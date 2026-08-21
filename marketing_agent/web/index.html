@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Marketing Agent</title>
+  <link rel="stylesheet" href="/app/static/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand-mark">M</div>
+    <div><strong>Marketing Agent</strong><small>AI 营销创意工作台</small></div>
+    <span id="serviceState" class="status-pill">连接中</span>
+  </header>
+  <main>
+    <section class="hero">
+      <div><span class="eyebrow">CREATIVE COPILOT</span><h1>把营销需求变成<br>可交付的视觉方案</h1></div>
+      <p>自动生成候选、检查文字和视觉质量、修复关键问题，并输出多渠道尺寸。</p>
+    </section>
+    <div class="workspace">
+      <section class="panel form-panel">
+        <div class="panel-title"><span>01</span><div><h2>创建营销任务</h2><p>描述产品、目标和必须遵守的规则</p></div></div>
+        <form id="taskForm">
+          <label>营销需求<textarea id="prompt" required minlength="3" placeholder="例如：为高端修护精华制作新品海报。标题“焕亮新生”，副标题“奢润修护精华”，象牙白和香槟金配色，产品瓶为视觉中心。"></textarea></label>
+          <div class="grid-two">
+            <label>品牌名称<input id="brandName" placeholder="例如 LUMIÈRE"></label>
+            <label>品牌调性<input id="brandTone" placeholder="高端, 克制, 温润"></label>
+          </div>
+          <div class="grid-two">
+            <label>主色<input id="colors" placeholder="象牙白, 香槟金"></label>
+            <label>必须出现的文字<input id="requiredPhrases" placeholder="焕亮新生, LUMIÈRE"></label>
+          </div>
+          <div class="grid-two">
+            <label>禁止出现的文字<input id="forbiddenPhrases" placeholder="立即购买, 最佳"></label>
+            <label>候选数量<select id="candidateCount"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></label>
+          </div>
+          <fieldset><legend>输出尺寸</legend><div class="checks">
+            <label><input type="checkbox" name="format" value="1:1" checked> 1:1</label>
+            <label><input type="checkbox" name="format" value="4:5"> 4:5</label>
+            <label><input type="checkbox" name="format" value="9:16"> 9:16</label>
+            <label><input type="checkbox" name="format" value="16:9"> 16:9</label>
+          </div></fieldset>
+          <label class="upload">产品图或参考图（可选）<input id="imageFile" type="file" accept="image/png,image/jpeg,image/webp"><span id="fileName">选择图片</span></label>
+          <div class="checks options">
+            <label><input id="generateCopy" type="checkbox" checked> 自动生成文案</label>
+            <label><input id="reviewRequired" type="checkbox"> 完成后人工审核</label>
+          </div>
+          <button id="submitButton" class="primary" type="submit">开始生成 <span>→</span></button>
+          <p id="formError" class="error"></p>
+        </form>
+      </section>
+      <section class="panel result-panel">
+        <div class="panel-title"><span>02</span><div><h2>Agent 执行</h2><p id="taskLabel">尚未提交任务</p></div></div>
+        <div id="emptyState" class="empty"><div class="orb"></div><h3>等待你的创意需求</h3><p>提交后将在这里查看实时进度与最终结果</p></div>
+        <div id="taskView" class="hidden">
+          <div class="progress-head"><strong id="statusText">排队中</strong><span id="phaseText">waiting</span></div>
+          <div class="progress"><i id="progressBar"></i></div>
+          <ol id="timeline" class="timeline"></ol>
+          <div id="gallery" class="gallery"></div>
+          <div id="reviewBox" class="review hidden">
+            <h3>需要你的确认</h3><textarea id="reviewFeedback" placeholder="如需修改，请描述修改意见"></textarea>
+            <div><button id="approveButton" class="primary small">批准结果</button><button id="reviseButton" class="secondary small">提交修改</button></div>
+          </div>
+          <button id="cancelButton" class="text-button">取消排队任务</button>
+        </div>
+      </section>
+    </div>
+    <section class="history"><div class="history-head"><div><span class="eyebrow">HISTORY</span><h2>最近任务</h2></div><button id="refreshHistory" class="secondary small">刷新</button></div><div id="historyList" class="history-list"></div></section>
+  </main>
+  <script src="/app/static/app.js" defer></script>
+</body>
+</html>

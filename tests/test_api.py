@@ -16,6 +16,19 @@ def test_health_lists_registered_tools(tmp_path: Path) -> None:
     assert response.json()["tools"] == ["edit_image", "evaluate_image", "generate_image"]
 
 
+def test_user_web_app_and_root_redirect(tmp_path: Path) -> None:
+    with TestClient(create_app(task_root=tmp_path / "tasks")) as client:
+        root = client.get("/", follow_redirects=False)
+        page = client.get("/app")
+        script = client.get("/app/static/app.js")
+
+    assert root.status_code == 307 and root.headers["location"] == "/app"
+    assert page.status_code == 200
+    assert "创建营销任务" in page.text
+    assert script.status_code == 200
+    assert "TASK" not in script.text
+
+
 def test_create_and_read_task_result(tmp_path: Path) -> None:
     with TestClient(create_app(task_root=tmp_path / "tasks")) as client:
         created = client.post(

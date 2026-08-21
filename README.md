@@ -322,6 +322,18 @@ GET /health
 `/health` 中的 `queue` 返回 queued、running、completed、failed 和 cancelled 数量。
 未来切换 Redis 时只需替换队列适配器，Agent 执行代码和 API 合同无需变化。
 
+### 用户 Web 工作台
+
+启动 API 后访问：
+
+```text
+http://127.0.0.1:8000/app
+```
+
+Web 工作台支持填写营销需求和品牌规则、上传产品图、选择候选数量和输出尺寸、
+查看任务状态与执行事件、预览和下载生成结果，以及批准或提交人工修改意见。
+根路径 `/` 会自动跳转到工作台；研发与实验看板仍保留在 `/dashboard`。
+
 ## 当前限制
 
 - 开启 `QWEN_UNLOAD_AFTER_GENERATE=true` 会减少显存占用，但多轮生成需要重新加载 Qwen。

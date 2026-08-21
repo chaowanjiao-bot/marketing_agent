@@ -4,7 +4,8 @@ import os
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .asset_store import AssetStore
@@ -82,6 +83,16 @@ def create_app(
     )
     dashboard = DashboardService(store)
     app = FastAPI(title="Marketing Creative Agent", version="0.2.0")
+    web_root = Path(__file__).parent / "web"
+    app.mount("/app/static", StaticFiles(directory=web_root), name="app-static")
+
+    @app.get("/", include_in_schema=False)
+    def root_redirect() -> RedirectResponse:
+        return RedirectResponse("/app")
+
+    @app.get("/app", include_in_schema=False)
+    def user_app() -> FileResponse:
+        return FileResponse(web_root / "index.html")
 
     @app.on_event("shutdown")
     def shutdown_executor() -> None:
