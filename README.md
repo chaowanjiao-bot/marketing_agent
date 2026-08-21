@@ -83,7 +83,7 @@ cp .env.example .env
 PYTHONPATH="$PWD" runtime/venv/gpu/bin/python -m pytest -q tests
 ```
 
-当前测试基线：79 个测试通过。
+当前测试基线：83 个测试通过。
 
 ## 命令行运行
 
@@ -212,6 +212,28 @@ GET /dashboard/tasks/{task_id}
 ```
 
 生成图通过受限资产接口展示，接口只允许读取对应任务目录内且已登记在结果中的文件。
+
+### 常驻模型 Worker 与 GPU 调度
+
+生产模式默认使用 JSONL 长驻 Worker。PowerPaint、VQAScore 和 OCR 首次调用加载模型，
+后续请求复用同一进程和模型对象；Qwen-Image pipeline 在 API 进程内复用。
+
+```bash
+MODEL_WORKER_MODE=persistent
+MODEL_WORKER_TIMEOUT_SECONDS=900
+GPU_MAX_CONCURRENT=1
+```
+
+所有真实 GPU 工具共享调度器，默认串行运行。`parallel_candidates=true` 只会并行准备
+候选，GPU 调用仍受 `GPU_MAX_CONCURRENT` 限制。调度状态可通过 `/health` 的
+`runtime.gpu_schedulers` 查看，包括当前活跃数、历史峰值和完成计数；每次 Observation
+的 `gpu_queue_seconds` 记录该次调用的排队时间。
+
+显存不足或需要逐次释放模型时，可以回退到旧模式：
+
+```bash
+MODEL_WORKER_MODE=oneshot
+```
 
 ## 当前限制
 

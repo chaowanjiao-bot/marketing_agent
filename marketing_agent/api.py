@@ -62,6 +62,7 @@ def create_app(
     @app.on_event("shutdown")
     def shutdown_executor() -> None:
         executor.shutdown()
+        tools.close()
 
     @app.get("/health")
     def health() -> dict[str, object]:
@@ -75,6 +76,7 @@ def create_app(
             "components": components,
             "toolset": toolset,
             "memory_enabled": memory is not None,
+            "runtime": tools.runtime_status(),
         }
 
     @app.get("/dashboard", response_class=HTMLResponse)

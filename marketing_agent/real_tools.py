@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import Any, Protocol
 
 from .adapters import QwenImageGenerator
@@ -9,6 +10,7 @@ from .adapters.subprocess_adapters import (
     SubprocessPowerPaintEditor,
     SubprocessVQAScoreEvaluator,
 )
+from .gpu_scheduler import GpuScheduler, ScheduledTool
 from .marketing_tools import SegmentThenEditTool, VQAEvaluateTool
 from .runtime_config import RuntimeConfig
 from .schemas import Observation, ObservationStatus
@@ -58,19 +60,20 @@ def build_qwen_registry(generator: ImageGenerator | None = None) -> ToolRegistry
 
 def build_production_registry(evaluation_threshold: float = 0.7) -> ToolRegistry:
     config = RuntimeConfig.from_env()
+    scheduler = GpuScheduler(int(os.environ.get("GPU_MAX_CONCURRENT", "1")))
     registry = ToolRegistry()
-    registry.register(QwenGenerateTool(QwenImageGenerator(config)))
-    registry.register(
+    registry.register(ScheduledTool(QwenGenerateTool(QwenImageGenerator(config)), scheduler))
+    registry.register(ScheduledTool(
         SegmentThenEditTool(
             GroundedSam2Segmenter(config.project_root),
             SubprocessPowerPaintEditor(config.project_root),
-        )
-    )
-    registry.register(
+        ), scheduler,
+    ))
+    registry.register(ScheduledTool(
         VQAEvaluateTool(
             SubprocessVQAScoreEvaluator(config.project_root),
             threshold=evaluation_threshold,
             text_evaluator=SubprocessOCRTextEvaluator(config.project_root),
-        )
-    )
+        ), scheduler,
+    ))
     return registry

@@ -34,6 +34,11 @@ class SegmentThenEditTool(AgentTool):
             metrics={"latency_seconds": latency},
         )
 
+    def close(self) -> None:
+        close = getattr(self.editor, "close", None)
+        if callable(close):
+            close()
+
 
 class VQAEvaluateTool(AgentTool):
     name = "evaluate_image"
@@ -95,3 +100,9 @@ class VQAEvaluateTool(AgentTool):
             issues=issues,
             recommended_actions=recommendations,
         )
+
+    def close(self) -> None:
+        for dependency in (self.evaluator, self.text_evaluator):
+            close = getattr(dependency, "close", None)
+            if callable(close):
+                close()

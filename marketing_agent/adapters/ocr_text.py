@@ -10,6 +10,22 @@ class QwenVLOCREvaluator:
         self.root = project_root
         self.checkpoint = self.root / "runtime/models/Qwen2.5-VL-3B-Instruct"
         self.device = device
+        self._model: Any | None = None
+        self._processor: Any | None = None
+
+    def load(self) -> None:
+        if self._model is not None and self._processor is not None:
+            return
+        import torch
+        from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
+
+        self._model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+            self.checkpoint, torch_dtype=torch.bfloat16, device_map=self.device,
+            local_files_only=True,
+        )
+        self._processor = AutoProcessor.from_pretrained(
+            self.checkpoint, local_files_only=True
+        )
 
     @staticmethod
     def _parse_output(text: str) -> list[str]:
@@ -35,17 +51,10 @@ class QwenVLOCREvaluator:
         }
 
     def evaluate(self, *, image_path: str, campaign_text: str) -> dict[str, Any]:
-        import torch
+        self.load()
         from qwen_vl_utils import process_vision_info
-        from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
-
-        model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-            self.checkpoint,
-            torch_dtype=torch.bfloat16,
-            device_map=self.device,
-            local_files_only=True,
-        )
-        processor = AutoProcessor.from_pretrained(self.checkpoint, local_files_only=True)
+        model = self._model
+        processor = self._processor
         messages = [{
             "role": "user",
             "content": [

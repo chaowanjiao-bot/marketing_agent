@@ -33,6 +33,22 @@ class ToolRegistry:
     def names(self) -> tuple[str, ...]:
         return tuple(sorted(self._tools))
 
+    def close(self) -> None:
+        for tool in self._tools.values():
+            close = getattr(tool, "close", None)
+            if callable(close):
+                close()
+
+    def runtime_status(self) -> dict[str, object]:
+        schedulers = []
+        for tool in self._tools.values():
+            scheduler = getattr(tool, "scheduler", None)
+            if scheduler is not None and scheduler not in schedulers:
+                schedulers.append(scheduler)
+        return {
+            "gpu_schedulers": [scheduler.snapshot() for scheduler in schedulers]
+        }
+
 
 class MockGenerateTool(AgentTool):
     name = "generate_image"
