@@ -53,3 +53,11 @@ def test_persistent_worker_reuses_same_process_for_multiple_calls(tmp_path: Path
     assert second["payload"]["action"] == "two"
     worker.close()
     assert worker.process is None
+
+
+def test_worker_prefers_calling_release_pythonpath(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("PYTHONPATH", "/release/repository")
+    worker = JsonModelWorker(Path("/usr/bin/python3"), tmp_path)
+    paths = worker._environment()["PYTHONPATH"].split(":")
+    assert paths[0] == "/release/repository"
+    assert paths[1:] == [str(tmp_path), str(tmp_path / "mvp")]

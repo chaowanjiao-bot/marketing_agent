@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import gc
+import os
 import time
 from typing import Any
 
@@ -27,6 +29,23 @@ class QwenImageGenerator:
         )
         self._pipeline.to(self.config.device)
 
+    def unload(self) -> None:
+        """Release the large generation pipeline before evaluator models load."""
+        if self._pipeline is None:
+            return
+        self._pipeline = None
+        gc.collect()
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+    @staticmethod
+    def _unload_after_generate() -> bool:
+        return os.environ.get("QWEN_UNLOAD_AFTER_GENERATE", "false").lower() in {
+            "1", "true", "yes", "on",
+        }
+
     def generate(
         self,
         *,
@@ -44,23 +63,27 @@ class QwenImageGenerator:
 
         started = time.monotonic()
         generator = torch.Generator(device=self.config.device).manual_seed(seed)
-        image = self._pipeline(
-            prompt=prompt,
-            negative_prompt=negative_prompt,
-            width=width,
-            height=height,
-            num_inference_steps=num_inference_steps,
-            true_cfg_scale=true_cfg_scale,
-            generator=generator,
-        ).images[0]
-        output_path = self.config.output_dir / output_name
-        image.save(output_path)
-        return {
-            "file_path": str(output_path),
-            "prompt": prompt,
-            "seed": seed,
-            "width": width,
-            "height": height,
-            "latency_seconds": round(time.monotonic() - started, 3),
-            "backend": "Qwen/Qwen-Image",
-        }
+        try:
+            image = self._pipeline(
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                width=width,
+                height=height,
+                num_inference_steps=num_inference_steps,
+                true_cfg_scale=true_cfg_scale,
+                generator=generator,
+            ).images[0]
+            output_path = self.config.output_dir / output_name
+            image.save(output_path)
+            return {
+                "file_path": str(output_path),
+                "prompt": prompt,
+                "seed": seed,
+                "width": width,
+                "height": height,
+                "latency_seconds": round(time.monotonic() - started, 3),
+                "backend": "Qwen/Qwen-Image",
+            }
+        finally:
+            if self._unload_after_generate():
+                self.unload()

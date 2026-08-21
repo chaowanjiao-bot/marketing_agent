@@ -27,9 +27,10 @@ class JsonModelWorker:
 
     def _environment(self) -> dict[str, str]:
         env = os.environ.copy()
-        paths = [str(self.project_root), str(self.project_root / "mvp")]
+        paths = []
         if env.get("PYTHONPATH"):
             paths.append(env["PYTHONPATH"])
+        paths.extend([str(self.project_root), str(self.project_root / "mvp")])
         env["PYTHONPATH"] = os.pathsep.join(paths)
         return env
 
