@@ -4,7 +4,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from threading import Lock
 
 from .case_memory import CaseMemory, format_retrieval_context
-from .candidates import run_candidate_batch
+from .candidates import run_campaign_batch
 from .schemas import TaskRequest
 from .task_store import TaskStore
 from .tools import ToolRegistry
@@ -64,7 +64,7 @@ class TaskExecutor:
                 request = request.model_copy(
                     update={"memory_context": format_retrieval_context(retrieved)}
                 )
-            result = run_candidate_batch(request, registry=self.registry)
+            result = run_campaign_batch(request, registry=self.registry)
             retrieved_ids = [str(case["case_id"]) for case in retrieved]
             result = result.model_copy(update={
                 "memory_used": bool(retrieved),

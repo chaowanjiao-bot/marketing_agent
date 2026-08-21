@@ -6,7 +6,11 @@ from marketing_agent.schemas import ObservationStatus, TaskRequest
 
 
 class FakeGenerator:
+    def __init__(self) -> None:
+        self.calls = []
+
     def generate(self, **kwargs: Any) -> dict[str, Any]:
+        self.calls.append(kwargs)
         return {
             "file_path": "runtime/outputs/fake.png",
             "prompt": kwargs["prompt"],
@@ -17,11 +21,19 @@ class FakeGenerator:
 
 
 def test_qwen_tool_converts_adapter_result_to_observation() -> None:
-    tool = QwenGenerateTool(FakeGenerator())
-    observation = tool.execute({"prompt": "campaign poster", "seed": 7})
+    generator = FakeGenerator()
+    tool = QwenGenerateTool(generator)
+    observation = tool.execute({
+        "prompt": "campaign poster", "seed": 7, "width": 768, "height": 1360,
+        "output_format": "9:16",
+    })
     assert observation.status == ObservationStatus.SUCCESS
     assert observation.outputs["backend"] == "Qwen/Qwen-Image"
     assert observation.metrics["latency_seconds"] == 1.25
+    assert generator.calls[0]["width"] == 768
+    assert generator.calls[0]["height"] == 1360
+    assert generator.calls[0]["output_name"] == "qwen_9x16_s7_v1.png"
+    assert observation.outputs["output_format"] == "9:16"
 
 
 def test_qwen_registry_preserves_agent_tool_contract() -> None:

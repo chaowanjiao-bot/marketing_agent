@@ -83,7 +83,7 @@ cp .env.example .env
 PYTHONPATH="$PWD" runtime/venv/gpu/bin/python -m pytest -q tests
 ```
 
-当前测试基线：67 个测试通过。
+当前测试基线：71 个测试通过。
 
 ## 命令行运行
 
@@ -149,6 +149,22 @@ curl http://127.0.0.1:8000/health
 ```
 
 GPU 模式建议保持 `parallel_candidates=false`，避免多个扩散模型同时争用显存。
+
+### 多尺寸渠道适配
+
+`output_formats` 支持 `1:1`、`4:5`、`9:16` 和 `16:9`。Agent 会针对每种
+画幅注入独立安全区规则并分别选出最佳候选，结果通过 `format_summaries` 返回。
+
+```json
+{
+  "prompt": "生成全渠道香水活动海报",
+  "output_formats": ["1:1", "4:5", "9:16", "16:9"],
+  "candidate_count": 2
+}
+```
+
+以上请求会运行 4 个画幅 × 2 个候选。当前多尺寸仅支持文生图任务；图像编辑仍保持
+原图尺寸，防止 PowerPaint 在未重排版时产生拉伸结果。
 
 ## 当前限制
 

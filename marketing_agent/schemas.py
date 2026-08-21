@@ -8,6 +8,7 @@ from uuid import uuid4
 from .brief import CreativityLevel
 from .brand import BrandProfile
 from .copy_agent import MarketingCopy
+from .formats import OutputFormat
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -80,6 +81,9 @@ class AssetVersion(BaseModel):
     prompt: str
     seed: int
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    output_format: OutputFormat = OutputFormat.SQUARE
+    width: int = Field(default=1024, gt=0)
+    height: int = Field(default=1024, gt=0)
 
 
 class BudgetState(BaseModel):
@@ -110,6 +114,17 @@ class TaskRequest(BaseModel):
     candidate_count: int = Field(default=1, ge=1, le=8)
     parallel_candidates: bool = False
     seed: int = Field(default=42, ge=0, le=2_147_483_647)
+    output_formats: list[OutputFormat] = Field(
+        default_factory=lambda: [OutputFormat.SQUARE], min_length=1, max_length=4
+    )
+
+    @model_validator(mode="after")
+    def validate_output_formats(self) -> "TaskRequest":
+        if len(set(self.output_formats)) != len(self.output_formats):
+            raise ValueError("output_formats must be unique")
+        if (self.input_image or self.input_asset_id) and self.output_formats != [OutputFormat.SQUARE]:
+            raise ValueError("format variants currently support text-to-image tasks only")
+        return self
 
 
 class FinalResult(BaseModel):
@@ -132,6 +147,8 @@ class FinalResult(BaseModel):
     brand_id: str | None = None
     candidate_summaries: list["CandidateSummary"] = Field(default_factory=list)
     selected_candidate_index: int = 0
+    format_summaries: list["FormatSummary"] = Field(default_factory=list)
+    primary_output_format: OutputFormat = OutputFormat.SQUARE
 
 
 class CandidateSummary(BaseModel):
@@ -144,3 +161,14 @@ class CandidateSummary(BaseModel):
     compliant: bool = False
     asset_count: int = Field(ge=0)
     selected: bool = False
+    output_format: OutputFormat = OutputFormat.SQUARE
+
+
+class FormatSummary(BaseModel):
+    output_format: OutputFormat
+    width: int = Field(gt=0)
+    height: int = Field(gt=0)
+    best_asset_id: str | None = None
+    best_score: float | None = None
+    compliant: bool = False
+    selected_candidate_index: int = Field(default=0, ge=0)

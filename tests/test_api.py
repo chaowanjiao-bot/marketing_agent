@@ -150,3 +150,27 @@ def test_api_persists_multi_candidate_selection(tmp_path: Path) -> None:
     assert sum(item["selected"] for item in result["candidate_summaries"]) == 1
     assert result["selected_candidate_index"] in {0, 1, 2}
     assert len(result["assets"]) == 6
+
+
+def test_api_returns_one_selected_asset_per_output_format(tmp_path: Path) -> None:
+    formats = ["1:1", "4:5", "9:16", "16:9"]
+    with TestClient(create_app(task_root=tmp_path / "tasks")) as client:
+        created = client.post("/tasks", json={
+            "prompt": "生成全渠道香水活动海报",
+            "output_formats": formats,
+            "max_iterations": 8,
+        })
+        assert created.status_code == 202
+        task_id = created.json()["task_id"]
+        for _ in range(200):
+            status = client.get(f"/tasks/{task_id}").json()["status"]
+            if status in {"completed", "failed"}:
+                break
+            time.sleep(0.01)
+        result = client.get(f"/tasks/{task_id}/result").json()
+    assert status == "completed"
+    assert [item["output_format"] for item in result["format_summaries"]] == formats
+    assert all(item["best_asset_id"] for item in result["format_summaries"])
+    assert {(asset["width"], asset["height"]) for asset in result["assets"]} == {
+        (1024, 1024), (1024, 1280), (768, 1360), (1360, 768),
+    }

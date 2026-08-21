@@ -5,6 +5,7 @@ from typing import Any, TypedDict
 from langgraph.graph import END, START, StateGraph
 from .brief import CreativityLevel, MarketingBrief, MarketingInputInterpreter
 from .copy_agent import MarketingCopy, MarketingCopyAgent
+from .formats import get_format_spec
 
 from .schemas import (
     AssetVersion,
@@ -162,6 +163,7 @@ def generation_context(state: AgentState) -> str:
         sections.append(state["marketing_copy"].prompt_context())
     if state["request"].memory_context:
         sections.append(state["request"].memory_context)
+    sections.append(get_format_spec(state["request"].output_formats[0]).prompt_context())
     return "\n\n".join(section for section in sections if section)
 
 
@@ -192,6 +194,7 @@ def decide(state: AgentState) -> dict[str, Any]:
             else "generate_image"
         )
         generation_prompt = generation_context(state)
+        format_spec = get_format_spec(state["request"].output_formats[0])
         decision = Decision(
             type=DecisionType.CALL_TOOL,
             reason_summary=f"根据任务类型选择{tool_name}",
@@ -204,6 +207,9 @@ def decide(state: AgentState) -> dict[str, Any]:
                 "seed": generation_seed(
                     state["generation_attempt"] + 1, state["request"].seed
                 ),
+                "width": format_spec.width,
+                "height": format_spec.height,
+                "output_format": format_spec.name.value,
             },
             success_criteria=["生成有效图片资产"],
         )
@@ -233,6 +239,7 @@ def decide(state: AgentState) -> dict[str, Any]:
             if goal.task_type == TaskType.IMAGE_EDIT
             else "generate_image"
         )
+        format_spec = get_format_spec(state["request"].output_formats[0])
         decision = Decision(
             type=DecisionType.CALL_TOOL,
             reason_summary="评估未通过，根据Observation重新执行修复",
@@ -245,6 +252,9 @@ def decide(state: AgentState) -> dict[str, Any]:
                 "seed": generation_seed(
                     state["generation_attempt"] + 1, state["request"].seed
                 ),
+                "width": format_spec.width,
+                "height": format_spec.height,
+                "output_format": format_spec.name.value,
             },
             success_criteria=["修复评估器指出的问题"],
         )
@@ -300,6 +310,9 @@ def make_execute_tool(registry: ToolRegistry):
                 file_path=str(observation.outputs["file_path"]),
                 prompt=str(observation.outputs["prompt"]),
                 seed=int(observation.outputs["seed"]),
+                output_format=str(observation.outputs.get("output_format", "1:1")),
+                width=int(observation.outputs.get("width", 1024)),
+                height=int(observation.outputs.get("height", 1024)),
             )
             updates.update(
                 assets=state["assets"] + [asset],
@@ -434,4 +447,5 @@ def run_task(request: TaskRequest, registry: ToolRegistry | None = None) -> Fina
         best_compliant_score=state["best_compliant_score"],
         marketing_copy=state["marketing_copy"],
         brand_id=request.brand_profile.brand_id if request.brand_profile else None,
+        primary_output_format=request.output_formats[0],
     )

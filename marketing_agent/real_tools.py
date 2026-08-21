@@ -27,11 +27,17 @@ class QwenGenerateTool(AgentTool):
 
     def execute(self, arguments: dict[str, Any]) -> Observation:
         attempt = int(arguments.get("attempt", 1))
+        seed = int(arguments.get("seed", 42))
+        output_format = str(arguments.get("output_format", "1:1"))
+        format_slug = output_format.replace(":", "x")
         result = self.generator.generate(
             prompt=str(arguments.get("prompt", "")),
-            seed=int(arguments.get("seed", 42)),
-            output_name=f"qwen_generated_v{attempt}.png",
+            seed=seed,
+            width=int(arguments.get("width", 1024)),
+            height=int(arguments.get("height", 1024)),
+            output_name=f"qwen_{format_slug}_s{seed}_v{attempt}.png",
         )
+        result.setdefault("output_format", output_format)
         latency = float(result.pop("latency_seconds", 0.0))
         return Observation(
             tool_name=self.name,

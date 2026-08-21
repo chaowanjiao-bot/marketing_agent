@@ -3,7 +3,8 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 
 from .graph import run_task
-from .schemas import CandidateSummary, FinalResult, TaskRequest
+from .formats import get_format_spec
+from .schemas import CandidateSummary, FinalResult, FormatSummary, TaskRequest
 from .tools import ToolRegistry
 
 
@@ -56,6 +57,7 @@ def run_candidate_batch(request: TaskRequest, registry: ToolRegistry) -> FinalRe
             compliant=result.best_compliant_asset_id is not None,
             asset_count=len(result.assets),
             selected=index == selected_index,
+            output_format=request.output_formats[0],
         )
         for index, result in enumerate(results)
     ]
@@ -83,4 +85,43 @@ def run_candidate_batch(request: TaskRequest, registry: ToolRegistry) -> FinalRe
         "trace": batch_trace + selected.trace,
         "candidate_summaries": summaries,
         "selected_candidate_index": selected_index,
+    })
+
+
+def run_campaign_batch(request: TaskRequest, registry: ToolRegistry) -> FinalResult:
+    format_results: list[FinalResult] = []
+    for output_format in request.output_formats:
+        format_request = request.model_copy(update={"output_formats": [output_format]})
+        format_results.append(run_candidate_batch(format_request, registry))
+    if len(format_results) == 1:
+        result = format_results[0]
+        spec = get_format_spec(request.output_formats[0])
+        return result.model_copy(update={"format_summaries": [FormatSummary(
+            output_format=spec.name, width=spec.width, height=spec.height,
+            best_asset_id=result.best_asset_id, best_score=result.best_score,
+            compliant=result.best_compliant_asset_id is not None,
+            selected_candidate_index=result.selected_candidate_index,
+        )]})
+
+    primary = format_results[0]
+    summaries: list[FormatSummary] = []
+    for output_format, result in zip(request.output_formats, format_results):
+        spec = get_format_spec(output_format)
+        summaries.append(FormatSummary(
+            output_format=output_format, width=spec.width, height=spec.height,
+            best_asset_id=result.best_asset_id, best_score=result.best_score,
+            compliant=result.best_compliant_asset_id is not None,
+            selected_candidate_index=result.selected_candidate_index,
+        ))
+    return primary.model_copy(update={
+        "assets": [asset for result in format_results for asset in result.assets],
+        "observations": [item for result in format_results for item in result.observations],
+        "trace": [{"event": "format_batch_completed", "formats": [
+            output_format.value for output_format in request.output_formats
+        ]}] + [item for result in format_results for item in result.trace],
+        "candidate_summaries": [
+            item for result in format_results for item in result.candidate_summaries
+        ],
+        "format_summaries": summaries,
+        "primary_output_format": request.output_formats[0],
     })
