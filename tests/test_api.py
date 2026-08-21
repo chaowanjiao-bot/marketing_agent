@@ -128,3 +128,25 @@ def test_rag_is_disabled_without_explicit_configuration(tmp_path: Path) -> None:
     assert health.json()["memory_enabled"] is False
     assert search.status_code == 503
     assert not (tmp_path / "memory").exists()
+
+
+def test_api_persists_multi_candidate_selection(tmp_path: Path) -> None:
+    with TestClient(create_app(task_root=tmp_path / "tasks")) as client:
+        created = client.post("/tasks", json={
+            "prompt": "生成三版高端香水活动海报",
+            "candidate_count": 3,
+            "max_iterations": 8,
+        })
+        assert created.status_code == 202
+        task_id = created.json()["task_id"]
+        for _ in range(200):
+            status = client.get(f"/tasks/{task_id}").json()["status"]
+            if status in {"completed", "failed"}:
+                break
+            time.sleep(0.01)
+        result = client.get(f"/tasks/{task_id}/result").json()
+    assert status == "completed"
+    assert len(result["candidate_summaries"]) == 3
+    assert sum(item["selected"] for item in result["candidate_summaries"]) == 1
+    assert result["selected_candidate_index"] in {0, 1, 2}
+    assert len(result["assets"]) == 6

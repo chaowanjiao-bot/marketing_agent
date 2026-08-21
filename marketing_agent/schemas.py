@@ -107,6 +107,9 @@ class TaskRequest(BaseModel):
     memory_context: str = Field(default="", exclude=True)
     brand_profile: BrandProfile | None = None
     generate_copy: bool = True
+    candidate_count: int = Field(default=1, ge=1, le=8)
+    parallel_candidates: bool = False
+    seed: int = Field(default=42, ge=0, le=2_147_483_647)
 
 
 class FinalResult(BaseModel):
@@ -127,3 +130,17 @@ class FinalResult(BaseModel):
     saved_case_id: str | None = None
     marketing_copy: MarketingCopy | None = None
     brand_id: str | None = None
+    candidate_summaries: list["CandidateSummary"] = Field(default_factory=list)
+    selected_candidate_index: int = 0
+
+
+class CandidateSummary(BaseModel):
+    candidate_index: int = Field(ge=0)
+    seed: int = Field(ge=0)
+    status: str
+    terminal_reason: str
+    best_asset_id: str | None = None
+    best_score: float | None = None
+    compliant: bool = False
+    asset_count: int = Field(ge=0)
+    selected: bool = False

@@ -83,7 +83,7 @@ cp .env.example .env
 PYTHONPATH="$PWD" runtime/venv/gpu/bin/python -m pytest -q tests
 ```
 
-当前测试基线：63 个测试通过。
+当前测试基线：67 个测试通过。
 
 ## 命令行运行
 
@@ -132,6 +132,23 @@ curl http://127.0.0.1:8000/health
 ```
 
 不需要自动生成文案时传入 `"generate_copy": false`。
+
+### Top-K 多候选生成
+
+通过 `candidate_count` 请求 2～8 个独立候选。每个候选使用可复现的独立种子，
+最终按“文字合规优先、营销评分其次”自动选择；结果中的 `candidate_summaries`
+保留所有候选的分数、合规状态和选中标记。
+
+```json
+{
+  "prompt": "生成高端精华活动海报",
+  "candidate_count": 3,
+  "seed": 42,
+  "parallel_candidates": false
+}
+```
+
+GPU 模式建议保持 `parallel_candidates=false`，避免多个扩散模型同时争用显存。
 
 ## 当前限制
 

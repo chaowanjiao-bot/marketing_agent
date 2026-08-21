@@ -74,8 +74,8 @@ REPAIR_INSTRUCTIONS = {
 }
 
 
-def generation_seed(attempt: int) -> int:
-    return BASE_SEED + max(attempt - 1, 0) * SEED_STRIDE
+def generation_seed(attempt: int, base_seed: int = BASE_SEED) -> int:
+    return base_seed + max(attempt - 1, 0) * SEED_STRIDE
 
 
 def repair_actions_for(observation: Observation) -> list[str]:
@@ -201,7 +201,9 @@ def decide(state: AgentState) -> dict[str, Any]:
                 "input_image": state["request"].input_image,
                 "target_expression": state["request"].target_expression,
                 "attempt": state["generation_attempt"] + 1,
-                "seed": generation_seed(state["generation_attempt"] + 1),
+                "seed": generation_seed(
+                    state["generation_attempt"] + 1, state["request"].seed
+                ),
             },
             success_criteria=["生成有效图片资产"],
         )
@@ -240,7 +242,9 @@ def decide(state: AgentState) -> dict[str, Any]:
                 "input_image": state["request"].input_image,
                 "attempt": state["generation_attempt"] + 1,
                 "target_expression": state["request"].target_expression,
-                "seed": generation_seed(state["generation_attempt"] + 1),
+                "seed": generation_seed(
+                    state["generation_attempt"] + 1, state["request"].seed
+                ),
             },
             success_criteria=["修复评估器指出的问题"],
         )
