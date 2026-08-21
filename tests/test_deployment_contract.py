@@ -44,6 +44,7 @@ def test_production_process_deployment_contract() -> None:
         "APP_PYTHON=", "CUDA_VISIBLE_DEVICES=",
     }
     assert all(value in template for value in required)
+    assert "MODEL_WORKER_MODE=oneshot" in template
     assert "password" not in template.casefold()
     assert "private_key" not in template.casefold()
 

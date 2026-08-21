@@ -213,13 +213,14 @@ GET /dashboard/tasks/{task_id}
 
 生成图通过受限资产接口展示，接口只允许读取对应任务目录内且已登记在结果中的文件。
 
-### 常驻模型 Worker 与 GPU 调度
+### 模型 Worker 与 GPU 调度
 
-生产模式默认使用 JSONL 长驻 Worker。PowerPaint、VQAScore 和 OCR 首次调用加载模型，
-后续请求复用同一进程和模型对象；Qwen-Image pipeline 在 API 进程内复用。
+单张 80GB GPU 的生产部署默认使用一次性模型 Worker。VQAScore 和 OCR 串行执行，
+每个评估进程完成后立即退出并释放显存，避免两个评估模型叠加后 OOM；
+`QWEN_UNLOAD_AFTER_GENERATE=true` 也保证后续评估或修复生成能重新取得完整显存。
 
 ```bash
-MODEL_WORKER_MODE=persistent
+MODEL_WORKER_MODE=oneshot
 MODEL_WORKER_TIMEOUT_SECONDS=900
 GPU_MAX_CONCURRENT=1
 ```
@@ -229,10 +230,10 @@ GPU_MAX_CONCURRENT=1
 `runtime.gpu_schedulers` 查看，包括当前活跃数、历史峰值和完成计数；每次 Observation
 的 `gpu_queue_seconds` 记录该次调用的排队时间。
 
-显存不足或需要逐次释放模型时，可以回退到旧模式：
+只有在评估模型总显存经过实测可以同时容纳时，才建议启用长驻 Worker 来减少冷加载：
 
 ```bash
-MODEL_WORKER_MODE=oneshot
+MODEL_WORKER_MODE=persistent
 ```
 
 ### 历史经验学习与策略记忆
