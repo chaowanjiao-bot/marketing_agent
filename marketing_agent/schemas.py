@@ -111,3 +111,7 @@ class FinalResult(BaseModel):
     trace: list[dict[str, Any]]
     best_asset_id: str | None = None
     best_score: float | None = None
+    best_aesthetic_asset_id: str | None = None
+    best_aesthetic_score: float | None = None
+    best_compliant_asset_id: str | None = None
+    best_compliant_score: float | None = None

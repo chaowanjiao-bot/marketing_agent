@@ -5,11 +5,6 @@ import re
 from pathlib import Path
 from typing import Any
 
-import torch
-from qwen_vl_utils import process_vision_info
-from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
-
-
 class QwenVLOCREvaluator:
     def __init__(self, project_root: Path, device: str = "cuda:0") -> None:
         self.root = project_root
@@ -24,7 +19,26 @@ class QwenVLOCREvaluator:
         payload = json.loads(match.group(0))
         return [str(item).strip() for item in payload.get("texts", []) if str(item).strip()]
 
+    @staticmethod
+    def assess_texts(expected: list[str], texts: list[str]) -> dict[str, Any]:
+        normalized = [re.sub(r"\s+", "", text).casefold() for text in texts]
+        joined_text = "".join(normalized)
+        expected_normalized = [re.sub(r"\s+", "", text).casefold() for text in expected]
+        missing = [text for text, norm in zip(expected, expected_normalized) if norm not in joined_text]
+        duplicated = [text for text, norm in zip(expected, expected_normalized) if joined_text.count(norm) > 1]
+        matched = len(expected) - len(missing)
+        return {
+            "missing": missing,
+            "duplicated": duplicated,
+            "accuracy": matched / len(expected) if expected else 1.0,
+            "uniqueness": 1.0 if not duplicated else 0.0,
+        }
+
     def evaluate(self, *, image_path: str, campaign_text: str) -> dict[str, Any]:
+        import torch
+        from qwen_vl_utils import process_vision_info
+        from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
+
         model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
             self.checkpoint,
             torch_dtype=torch.bfloat16,
@@ -53,13 +67,9 @@ class QwenVLOCREvaluator:
         texts = self._parse_output(raw)
 
         expected = re.findall(r"[“\"]([^”\"]+)[”\"]", campaign_text)
-        normalized = [re.sub(r"\s+", "", text).casefold() for text in texts]
-        expected_normalized = [re.sub(r"\s+", "", text).casefold() for text in expected]
-        missing = [text for text, norm in zip(expected, expected_normalized) if norm not in normalized]
-        duplicated = [text for text, norm in zip(expected, expected_normalized) if normalized.count(norm) > 1]
-        matched = len(expected) - len(missing)
-        accuracy = matched / len(expected) if expected else 1.0
-        uniqueness = 1.0 if not duplicated else 0.0
+        assessment = self.assess_texts(expected, texts)
+        missing = assessment["missing"]
+        duplicated = assessment["duplicated"]
         issues = []
         recommendations = []
         if missing:
@@ -73,7 +83,10 @@ class QwenVLOCREvaluator:
             "expected_texts": expected,
             "missing": missing,
             "duplicated": duplicated,
-            "dimensions": {"text_accuracy": accuracy, "text_uniqueness": uniqueness},
+            "dimensions": {
+                "text_accuracy": assessment["accuracy"],
+                "text_uniqueness": assessment["uniqueness"],
+            },
             "issues": issues,
             "recommendations": recommendations,
         }

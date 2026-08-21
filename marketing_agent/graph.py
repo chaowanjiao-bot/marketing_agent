@@ -36,6 +36,10 @@ class AgentState(TypedDict):
     terminal_reason: str | None
     best_asset_id: str | None
     best_score: float | None
+    best_aesthetic_asset_id: str | None
+    best_aesthetic_score: float | None
+    best_compliant_asset_id: str | None
+    best_compliant_score: float | None
     no_improvement_count: int
 
 
@@ -94,6 +98,10 @@ def initial_state(request: TaskRequest) -> AgentState:
         "terminal_reason": None,
         "best_asset_id": None,
         "best_score": None,
+        "best_aesthetic_asset_id": None,
+        "best_aesthetic_score": None,
+        "best_compliant_asset_id": None,
+        "best_compliant_score": None,
         "no_improvement_count": 0,
     }
 
@@ -276,13 +284,37 @@ def make_execute_tool(registry: ToolRegistry):
             next_attempt = state["evaluation_attempt"] + 1
             updates["evaluation_attempt"] = next_attempt
             score = float(observation.metrics.get("marketing_alignment", 0.0))
-            previous_best = state["best_score"]
-            is_best = previous_best is None or score > previous_best
-            meaningful = previous_best is None or score > previous_best + MIN_MEANINGFUL_IMPROVEMENT
+            text_accuracy = observation.metrics.get("text_accuracy", 1.0)
+            text_uniqueness = observation.metrics.get("text_uniqueness", 1.0)
+            compliant = text_accuracy >= 1.0 and text_uniqueness >= 1.0
+            previous_aesthetic = state["best_aesthetic_score"]
+            is_aesthetic_best = previous_aesthetic is None or score > previous_aesthetic
+            previous_compliant = state["best_compliant_score"]
+            is_compliant_best = compliant and (
+                previous_compliant is None or score > previous_compliant
+            )
+            became_compliant = compliant and previous_compliant is None
+            comparison_best = previous_compliant if compliant else previous_aesthetic
+            meaningful = became_compliant or comparison_best is None or (
+                score > comparison_best + MIN_MEANINGFUL_IMPROVEMENT
+            )
             no_improvement_count = 0 if meaningful else state["no_improvement_count"] + 1
+            current_asset_id = state["assets"][-1].asset_id
+            aesthetic_asset_id = (
+                current_asset_id if is_aesthetic_best else state["best_aesthetic_asset_id"]
+            )
+            aesthetic_score = score if is_aesthetic_best else previous_aesthetic
+            compliant_asset_id = (
+                current_asset_id if is_compliant_best else state["best_compliant_asset_id"]
+            )
+            compliant_score = score if is_compliant_best else previous_compliant
             updates.update(
-                best_score=score if is_best else previous_best,
-                best_asset_id=state["assets"][-1].asset_id if is_best else state["best_asset_id"],
+                best_aesthetic_asset_id=aesthetic_asset_id,
+                best_aesthetic_score=aesthetic_score,
+                best_compliant_asset_id=compliant_asset_id,
+                best_compliant_score=compliant_score,
+                best_asset_id=compliant_asset_id or aesthetic_asset_id,
+                best_score=compliant_score if compliant_asset_id else aesthetic_score,
                 no_improvement_count=no_improvement_count,
             )
             if observation.status == ObservationStatus.SUCCESS:
@@ -370,4 +402,8 @@ def run_task(request: TaskRequest, registry: ToolRegistry | None = None) -> Fina
         trace=state["trace"],
         best_asset_id=state["best_asset_id"],
         best_score=state["best_score"],
+        best_aesthetic_asset_id=state["best_aesthetic_asset_id"],
+        best_aesthetic_score=state["best_aesthetic_score"],
+        best_compliant_asset_id=state["best_compliant_asset_id"],
+        best_compliant_score=state["best_compliant_score"],
     )
