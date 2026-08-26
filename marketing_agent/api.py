@@ -237,6 +237,14 @@ def create_app(
         except (KeyError, ValueError) as exc:
             raise HTTPException(status_code=404, detail="task not found") from exc
 
+    @app.get("/tasks/{task_id}/observability")
+    def task_observability(task_id: str, request: Request) -> dict[str, object]:
+        protect_task(request, task_id)
+        try:
+            return dashboard.task_observability(task_id)
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(status_code=404, detail="task not found") from exc
+
     @app.post("/assets", status_code=201)
     async def upload_asset(request: Request, file: UploadFile = File(...)) -> dict[str, str | int]:
         user = identity(request)

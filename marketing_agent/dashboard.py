@@ -49,6 +49,19 @@ class DashboardService:
             "recent_tasks": snapshots[:50],
         }
 
+    def task_observability(self, task_id: str) -> dict[str, Any]:
+        result = self.store.result(task_id) or {}
+        trace = result.get("trace", [])
+        metrics = [item for item in trace if item.get("event") == "agent_run_metric"]
+        reports = [item for item in trace if item.get("event") == "campaign_run_report"]
+        checkpoints = [item for item in trace if item.get("event") == "campaign_checkpoint"]
+        return {
+            "task_id": task_id,
+            "report": reports[-1] if reports else None,
+            "metrics": metrics,
+            "checkpoints": checkpoints,
+        }
+
     def render_index(self) -> str:
         summary = self.summary()
         rows = "".join(self._task_row(item) for item in summary["recent_tasks"])

@@ -49,6 +49,26 @@ class ToolRegistry:
             "gpu_schedulers": [scheduler.snapshot() for scheduler in schedulers]
         }
 
+    def restricted(self, allowed: frozenset[str] | set[str]) -> "RestrictedToolRegistry":
+        return RestrictedToolRegistry(self, frozenset(allowed))
+
+
+class RestrictedToolRegistry:
+    """Capability view that enforces an Agent's declared tool allow-list."""
+
+    def __init__(self, registry: ToolRegistry, allowed: frozenset[str]) -> None:
+        self._registry = registry
+        self._allowed = allowed
+
+    def get(self, name: str) -> AgentTool:
+        if name not in self._allowed:
+            raise PermissionError(f"tool '{name}' is not allowed for this agent")
+        return self._registry.get(name)
+
+    @property
+    def names(self) -> tuple[str, ...]:
+        return tuple(sorted(set(self._registry.names) & set(self._allowed)))
+
 
 class MockGenerateTool(AgentTool):
     name = "generate_image"
@@ -97,11 +117,18 @@ class MockEvaluateTool(AgentTool):
 
     def execute(self, arguments: dict[str, Any]) -> Observation:
         attempt = int(arguments.get("attempt", 1))
+        expected_texts = [str(x) for x in arguments.get("expected_texts") or []]
         if attempt == 1:
             return Observation(
                 tool_name=self.name,
                 status=ObservationStatus.PARTIAL,
-                metrics={"marketing_alignment": 0.62},
+                outputs={"recognized_texts": expected_texts},
+                metrics={
+                    "marketing_alignment": 0.62,
+                    "text_accuracy": 1.0,
+                    "text_uniqueness": 1.0,
+                    "text_cleanliness": 1.0,
+                },
                 issues=["标题安全区不足"],
                 recommended_actions=["根据评估意见重新生成或编辑"],
                 cost=0.01,
@@ -109,7 +136,13 @@ class MockEvaluateTool(AgentTool):
         return Observation(
             tool_name=self.name,
             status=ObservationStatus.SUCCESS,
-            metrics={"marketing_alignment": 0.88},
+            outputs={"recognized_texts": expected_texts},
+            metrics={
+                "marketing_alignment": 0.88,
+                "text_accuracy": 1.0,
+                "text_uniqueness": 1.0,
+                "text_cleanliness": 1.0,
+            },
             cost=0.01,
         )
 
@@ -119,4 +152,6 @@ def build_default_registry() -> ToolRegistry:
     registry.register(MockGenerateTool())
     registry.register(MockEditTool())
     registry.register(MockEvaluateTool())
+    from .creative_tools import register_creative_tools
+    register_creative_tools(registry, strict_typography=False)
     return registry

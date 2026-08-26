@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from concurrent.futures import Future, ThreadPoolExecutor
+import os
 from threading import Lock
 
 from .case_memory import CaseMemory, format_retrieval_context
@@ -95,7 +96,49 @@ class TaskExecutor:
                 request = request.model_copy(update={
                     "experience_strategies": self.experience.strategies()
                 })
-            result = run_campaign_batch(request, registry=self.registry)
+            if request.orchestration_mode == "multi_agent":
+                from .contracts import MultiAgentCampaign
+                from .feedback_router import feedback_messages, route_human_feedback
+                from .model_adapters import structured_model_from_env
+                from .workflows import MultiAgentOptions, campaign_to_final_result, run_multi_agent_campaign
+
+                campaign = MultiAgentCampaign(request=request)
+                feedback_route = route_human_feedback(request.review_feedback)
+                if feedback_route is not None:
+                    campaign = campaign.model_copy(update={
+                        "human_feedback_route": feedback_route,
+                        "messages": feedback_messages(campaign.campaign_id, feedback_route),
+                    })
+                campaign = campaign.model_copy(update={
+                    "budget": campaign.budget.model_copy(update={
+                        "max_generations": max(request.max_iterations, len(request.output_formats)),
+                        "max_director_rounds": min(
+                            80, 8 + len(request.output_formats) * 6 + request.max_iterations * 3
+                        ),
+                    })
+                })
+                structured_model = structured_model_from_env()
+                try:
+                    result = campaign_to_final_result(
+                        run_multi_agent_campaign(
+                            campaign, registry=self.registry,
+                            model=structured_model,
+                            options=MultiAgentOptions(
+                                max_node_attempts=int(os.environ.get("MULTI_AGENT_MAX_NODE_ATTEMPTS", "2")),
+                                enable_checkpoints=os.environ.get(
+                                    "MULTI_AGENT_CHECKPOINTS", "true"
+                                ).lower() in {"1", "true", "yes"},
+                                checkpoint_directory=os.environ.get(
+                                    "MULTI_AGENT_CHECKPOINT_DIR"
+                                ),
+                            ),
+                        )
+                    )
+                finally:
+                    if structured_model is not None:
+                        structured_model.close()
+            else:
+                result = run_campaign_batch(request, registry=self.registry)
             retrieved_ids = [str(case["case_id"]) for case in retrieved]
             result = result.model_copy(update={
                 "memory_used": bool(retrieved),

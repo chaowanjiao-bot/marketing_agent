@@ -1,0 +1,14 @@
+[
+  {"case_id":"serum_brand_copy","prompt":"生成高端精华活动海报《焕亮新生》","formats":["1:1","4:5"],"required_text":["焕亮新生"],"forbidden_text":["全网最低"],"tags":["copy","brand","multi-format"]},
+  {"case_id":"lipstick_single_subject","prompt":"生成红色口红电商主图，唯一主体，纯白背景","formats":["1:1"],"required_text":[],"forbidden_text":[],"tags":["single-subject","ecommerce"]},
+  {"case_id":"perfume_story","prompt":"生成高端香水社交媒体海报《闻见夜色》","formats":["9:16"],"required_text":["闻见夜色"],"forbidden_text":[],"tags":["story","copy"]},
+  {"case_id":"coffee_campaign","prompt":"生成自然风格咖啡活动海报《晨间灵感》","formats":["1:1","9:16"],"required_text":["晨间灵感"],"forbidden_text":[],"tags":["campaign","multi-format"]},
+  {"case_id":"shoe_performance","prompt":"生成运动鞋转化广告，突出轻量缓震与立即购买","formats":["4:5"],"required_text":[],"forbidden_text":[],"tags":["performance","cta"]},
+  {"case_id":"phone_launch","prompt":"生成科技风手机新品发布海报《突破边界》","formats":["16:9","9:16"],"required_text":["突破边界"],"forbidden_text":[],"tags":["launch","multi-format"]},
+  {"case_id":"serum_forbidden_claim","prompt":"生成精华促销海报，不得出现全网最低","formats":["1:1"],"required_text":[],"forbidden_text":["全网最低"],"tags":["compliance"]},
+  {"case_id":"brand_unique_logo","prompt":"生成高端产品手册封面，品牌名只出现一次","formats":["4:5"],"required_text":[],"forbidden_text":[],"tags":["logo","brand"]},
+  {"case_id":"safe_area_story","prompt":"生成香水竖版故事海报，标题和CTA避开上下15%遮挡区","formats":["9:16"],"required_text":[],"forbidden_text":[],"tags":["safe-area"]},
+  {"case_id":"material_edit","prompt":"保持产品不变，将背景替换为暖象牙白丝绸场景","formats":["1:1"],"required_text":[],"forbidden_text":[],"tags":["edit","product-consistency"]},
+  {"case_id":"four_channel_pack","prompt":"生成高端精华全渠道活动素材《奢润新生》","formats":["1:1","4:5","9:16","16:9"],"required_text":["奢润新生"],"forbidden_text":[],"tags":["all-formats","stress"]},
+  {"case_id":"human_revision","prompt":"生成精华活动海报《焕亮新生》，支持人工反馈后重排版","formats":["1:1"],"required_text":["焕亮新生"],"forbidden_text":[],"tags":["human-review","revision"]}
+]

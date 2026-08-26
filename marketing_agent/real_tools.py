@@ -76,4 +76,6 @@ def build_production_registry(evaluation_threshold: float = 0.7) -> ToolRegistry
             text_evaluator=SubprocessOCRTextEvaluator(config.project_root),
         ), scheduler,
     ))
+    from .creative_tools import register_creative_tools
+    register_creative_tools(registry, strict_typography=True)
     return registry

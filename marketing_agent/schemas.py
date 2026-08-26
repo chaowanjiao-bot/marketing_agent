@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from .brief import CreativityLevel
@@ -129,6 +129,7 @@ class BudgetState(BaseModel):
 
 class TaskRequest(BaseModel):
     prompt: str = Field(min_length=3)
+    orchestration_mode: Literal["single_agent", "multi_agent"] = "single_agent"
     project_id: str | None = Field(default=None, pattern=r"^project_[0-9a-f]{12}$")
     input_image: str | None = None
     target_expression: str | None = None

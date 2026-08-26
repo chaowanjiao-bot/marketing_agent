@@ -1,3 +1,4 @@
+import json
 import time
 from pathlib import Path
 
@@ -7,6 +8,20 @@ from marketing_agent.api import create_app
 from marketing_agent.case_memory import CaseMemory
 from marketing_agent.experience import ExperienceMemory
 from marketing_agent.provenance import ProvenanceService
+
+
+def test_api_persists_multi_agent_orchestration_mode(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("TASK_EXECUTION_MODE", "external")
+    task_root = tmp_path / "tasks"
+    with TestClient(create_app(task_root=task_root)) as client:
+        response = client.post("/tasks", json={
+            "orchestration_mode": "multi_agent",
+            "prompt": "生成精华活动海报《焕亮新生》",
+        })
+    assert response.status_code == 202
+    task_id = response.json()["task_id"]
+    payload = json.loads((task_root / task_id / "request.json").read_text(encoding="utf-8"))
+    assert payload["orchestration_mode"] == "multi_agent"
 
 
 def test_health_lists_registered_tools(tmp_path: Path) -> None:
@@ -283,3 +298,14 @@ def test_api_human_review_revision_and_approval(tmp_path: Path) -> None:
     assert result["status"] == "completed"
     assert result["review_status"] == "approved"
     assert [item["decision"] for item in result["review_history"]] == ["revise", "approve"]
+
+
+def test_task_observability_contract(tmp_path: Path) -> None:
+    with TestClient(create_app(task_root=tmp_path / "tasks")) as client:
+        created = client.post("/tasks", json={"prompt": "生成新品海报"})
+        task_id = created.json()["task_id"]
+        response = client.get(f"/tasks/{task_id}/observability")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["task_id"] == task_id
+    assert set(payload) == {"task_id", "report", "metrics", "checkpoints"}

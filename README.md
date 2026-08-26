@@ -2,6 +2,13 @@
 
 基于 LangGraph 的营销图像生成与编辑 Agent。它不是固定 workflow：Agent 会根据真实视觉评估结果选择需要优先修复的 2–3 个维度，迭代生成候选图，并保留全局最佳版本。
 
+> 新架构：仓库已加入 Supervisor-Specialist 多智能体实现。Creative Director
+> 动态协调 Brief、三类 Strategy、Layout、Generation、Quality Critic 与
+> Compliance Agent，通过结构化消息、并行提案、独立双评审和证据驱动修复完成
+> 营销素材生产。原有单 Agent 流程继续保留，便于基线和消融对照。
+
+详细设计见 `docs/multi-agent-architecture.md`。
+
 ## 核心能力
 
 - Qwen-Image 文生图
@@ -38,6 +45,82 @@ runtime/               本地模型、环境、日志和输出（Git 忽略）
                          ↓
              通过 / 平台期早停 / 达到预算
 ```
+
+## 多智能体协作流程
+
+```text
+Creative Director
+  -> Brief Agent
+  -> Brand / Performance / Merchandising Strategy Agents（并行）
+  -> Layout Agent
+  -> Generation Agent
+  -> Quality Critic + Compliance Agent（并行）
+  -> 定向修复 / 人工审核 / 交付
+```
+
+开发环境可使用现有 mock 工具检查消息与路由，生产环境接入现有模型适配器：
+
+```bash
+python scripts/run_multi_agent.py \
+  "生成一张高端护肤精华液活动海报" \
+  --formats 1:1 4:5 \
+  --review-required
+
+python scripts/run_multi_agent.py \
+  "生成一张高端护肤精华液活动海报" \
+  --production \
+  --quality-threshold 0.80
+```
+
+API 请求通过 `orchestration_mode` 选择新架构；该字段会随任务持久化并由独立
+Worker 恢复执行：
+
+```json
+{
+  "orchestration_mode": "multi_agent",
+  "prompt": "生成高端精华活动海报《焕亮新生》",
+  "output_formats": ["1:1", "4:5"],
+  "review_required": true
+}
+```
+
+多 Agent 生产模式需要配置 `TYPOGRAPHY_FONT_PATH`。如需使用真实结构化
+Brief/Strategy 模型，同时设置 `STRUCTURED_MODEL_BASE_URL`、
+`STRUCTURED_MODEL_NAME` 和 `STRUCTURED_MODEL_API_KEY`；否则使用确定性降级策略。
+
+### 多 Agent 对照实验与消融
+
+固定验收集位于 `benchmarks/multi_agent_acceptance_cases.json`。统一运行直接生成、
+原单 Agent 和多 Agent 三组基线：
+
+```bash
+python scripts/run_multi_agent_benchmark.py --system all \
+  --report runtime/multi_agent_benchmark.json
+```
+
+消融实验：
+
+```bash
+python scripts/run_multi_agent_benchmark.py --system multi_agent --ablation no_parallel_strategy
+python scripts/run_multi_agent_benchmark.py --system multi_agent --ablation no_compliance
+python scripts/run_multi_agent_benchmark.py --system multi_agent --ablation no_structured_repair
+```
+
+报告会记录完成率、平均评分、生成次数、耗时、Director 轮数与冲突数量。用于简历的
+最终数字仍需在真实模型、固定硬件和人工金标条件下重新运行并保存原始报告。
+
+### 工程可靠性与可观测性
+
+多 Agent 节点采用有界重试策略，仅对超时和连接故障重试；每次尝试都会记录
+Agent、节点、耗时、错误类型和估算成本。完整运行状态支持原子化检查点保存，Worker
+异常后可恢复 Brief、策略、Layout、素材、评审结果和剩余预算。任务级指标接口：
+
+```text
+GET /tasks/{task_id}/observability
+```
+
+生产配置通过 `MULTI_AGENT_MAX_NODE_ATTEMPTS` 和 `MULTI_AGENT_CHECKPOINTS`
+控制。详细的告警建议和恢复约定见 `docs/operations.md`。
 
 ## 环境要求
 
