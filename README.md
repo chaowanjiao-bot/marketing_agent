@@ -1,135 +1,128 @@
-# Marketing Creative Agent
+# Marketing Creative Multi-Agent
 
-基于 LangGraph 的营销图像生成与编辑 Agent。它不是固定 workflow：Agent 会根据真实视觉评估结果选择需要优先修复的 2–3 个维度，迭代生成候选图，并保留全局最佳版本。
+A production-oriented, LangGraph-based system for generating, editing, reviewing, and delivering marketing creatives.
 
-> 新架构：仓库已加入 Supervisor-Specialist 多智能体实现。Creative Director
-> 动态协调 Brief、三类 Strategy、Layout、Generation、Quality Critic 与
-> Compliance Agent，通过结构化消息、并行提案、独立双评审和证据驱动修复完成
-> 营销素材生产。原有单 Agent 流程继续保留，便于基线和消融对照。
+The system uses a deterministic Creative Director to coordinate specialized Brief, Brand Strategy, Performance Strategy, Merchandising Strategy, Layout, Generation, Quality Critic, and Compliance agents. They collaborate through typed messages, parallel proposals, independent review gates, evidence-backed revisions, and explicit execution budgets.
 
-详细设计见 `docs/multi-agent-architecture.md`。
+The original single-agent quality loop remains available as a baseline for direct-generation, single-agent, multi-agent, and ablation comparisons.
 
-## 核心能力
+> Status: production-oriented prototype. Mock tools are included for development, while real model adapters target GPU deployment. Model weights are not included.
 
-- Qwen-Image 文生图
-- Grounding DINO + SAM2 目标定位与分割
-- PowerPaint 局部编辑
-- Qwen2.5-VL/VQAScore 十维美学评估
-- Qwen2.5-VL OCR 文字准确性与重复检测
-- Top-3 低分维度自动修复
-- 动态且可复现的随机种子
-- 最佳候选保留与质量平台期早停
-- FastAPI 异步任务接口
+## Highlights
 
-## 目录结构
+- Supervisor–Specialist multi-agent orchestration with LangGraph
+- Parallel Brand, Performance, and Merchandising strategy proposals
+- Independent Quality Critic and Compliance Agent with hard-veto rules
+- Structured revision plans routed to the responsible agent
+- Qwen-Image generation and PowerPaint local editing
+- Grounding DINO + SAM2 localization and segmentation
+- Qwen2.5-VL/VQAScore evaluation and OCR validation
+- Deterministic typography, safe-area, layout, and brand-rule tools
+- Multi-format delivery for `1:1`, `4:5`, `9:16`, and `16:9`
+- Top-K candidate generation with reproducible seeds
+- Human review, feedback routing, and approval history
+- FastAPI, durable SQLite queue, independent GPU worker, and web workspace
+- User/project isolation and optional C2PA provenance
+- Bounded retries, atomic checkpoints, cost estimates, and observability
+- Fixed acceptance datasets, system comparisons, and ablation experiments
 
-```text
-marketing_agent/       Agent、工具、模型适配器和 API
-tests/                 单元测试与接口测试
-scripts/               启动、验收、模型检查和实验入口
-requirements/          主环境及隔离模型环境依赖
-docs/                  模型与验收说明
-runtime/               本地模型、环境、日志和输出（Git 忽略）
-```
-
-## Agent 闭环
+## Architecture
 
 ```text
-理解目标 → 生成/编辑 → VQA + OCR 评估
-                         ↓
-                 选择最低 2–3 个维度
-                         ↓
-                生成具体中文修复指令
-                         ↓
-                 新候选 → 再评估
-                         ↓
-             通过 / 平台期早停 / 达到预算
-```
-
-## 多智能体协作流程
-
-```text
+User / API
+    |
+Task Executor
+    |
 Creative Director
-  -> Brief Agent
-  -> Brand / Performance / Merchandising Strategy Agents（并行）
-  -> Layout Agent
-  -> Generation Agent
-  -> Quality Critic + Compliance Agent（并行）
-  -> 定向修复 / 人工审核 / 交付
+    |-- Brief Agent
+    |-- Brand Strategy Agent ---------+
+    |-- Performance Strategy Agent ---+  parallel proposal panel
+    |-- Merchandising Strategy Agent -+
+    |-- Layout Agent
+    |-- Generation Agent -> image generation / local editing tools
+    |-- Shared VQA + OCR evaluation
+    |       |-- Quality Critic Agent
+    |       `-- Compliance Agent
+    |-- Structured revision / conflict resolution
+    `-- Human review or delivery
 ```
 
-开发环境可使用现有 mock 工具检查消息与路由，生产环境接入现有模型适配器：
+The graph defines safe execution boundaries without prescribing one fixed sequence. The Director inspects campaign state and decides which agents run next, whether they execute in parallel, which findings deserve revision, and when the campaign should stop.
 
-```bash
-python scripts/run_multi_agent.py \
-  "生成一张高端护肤精华液活动海报" \
-  --formats 1:1 4:5 \
-  --review-required
+Legal rules, compliance vetoes, tool permissions, budgets, and termination conditions remain enforced in code even when a structured model assists specialist reasoning.
 
-python scripts/run_multi_agent.py \
-  "生成一张高端护肤精华液活动海报" \
-  --production \
-  --quality-threshold 0.80
-```
+See [the architecture guide](docs/multi-agent-architecture.md) and [operations guide](docs/operations.md) for details.
 
-API 请求通过 `orchestration_mode` 选择新架构；该字段会随任务持久化并由独立
-Worker 恢复执行：
+## Workflow
 
-```json
-{
-  "orchestration_mode": "multi_agent",
-  "prompt": "生成高端精华活动海报《焕亮新生》",
-  "output_formats": ["1:1", "4:5"],
-  "review_required": true
-}
-```
+1. Brief Agent converts the request into a schema-valid creative brief.
+2. Three strategy agents independently propose brand, conversion, and merchandising directions.
+3. Creative Director selects a strategy using confidence, strengths, and risk evidence.
+4. Layout Agent creates format-specific normalized layouts and typography reservations.
+5. Generation Agent creates immutable asset versions through registered tools.
+6. The image is evaluated once; Quality Critic and Compliance Agent reuse the observation.
+7. Director resolves conflicts and creates typed repair operations for Layout or Generation.
+8. Each output format continues independently until it passes both gates or exhausts its budget.
+9. The campaign completes, waits for human review, requests clarification, or stops with an explicit reason.
 
-多 Agent 生产模式需要配置 `TYPOGRAPHY_FONT_PATH`。如需使用真实结构化
-Brief/Strategy 模型，同时设置 `STRUCTURED_MODEL_BASE_URL`、
-`STRUCTURED_MODEL_NAME` 和 `STRUCTURED_MODEL_API_KEY`；否则使用确定性降级策略。
+Structured repair operations include:
 
-### 多 Agent 对照实验与消融
+- `move_inside_safe_area`
+- `rerender_typography`
+- `adjust_visual_hierarchy`
+- `regenerate_asset`
+- `local_image_edit`
 
-固定验收集位于 `benchmarks/multi_agent_acceptance_cases.json`。统一运行直接生成、
-原单 Agent 和多 Agent 三组基线：
+Each repair identifies its target agent, source findings, priority, parameters, and elements that must be preserved. Director decisions and review conflicts are retained in the final trace.
 
-```bash
-python scripts/run_multi_agent_benchmark.py --system all \
-  --report runtime/multi_agent_benchmark.json
-```
+## Model Stack
 
-消融实验：
+| Capability | Backend |
+|---|---|
+| Text-to-image | Qwen-Image |
+| Target localization | Grounding DINO |
+| Segmentation | SAM2 |
+| Local image editing | PowerPaint v2 |
+| Visual quality | Qwen2.5-VL / VQAScore |
+| OCR and text validation | Qwen2.5-VL |
+| Structured reasoning | Optional OpenAI-compatible endpoint |
 
-```bash
-python scripts/run_multi_agent_benchmark.py --system multi_agent --ablation no_parallel_strategy
-python scripts/run_multi_agent_benchmark.py --system multi_agent --ablation no_compliance
-python scripts/run_multi_agent_benchmark.py --system multi_agent --ablation no_structured_repair
-```
+GPU models are isolated behind typed JSON subprocess adapters so incompatible Torch, CUDA, and Diffusers environments do not need to coexist in the API environment.
 
-报告会记录完成率、平均评分、生成次数、耗时、Director 轮数与冲突数量。用于简历的
-最终数字仍需在真实模型、固定硬件和人工金标条件下重新运行并保存原始报告。
-
-### 工程可靠性与可观测性
-
-多 Agent 节点采用有界重试策略，仅对超时和连接故障重试；每次尝试都会记录
-Agent、节点、耗时、错误类型和估算成本。完整运行状态支持原子化检查点保存，Worker
-异常后可恢复 Brief、策略、Layout、素材、评审结果和剩余预算。任务级指标接口：
+## Repository Layout
 
 ```text
-GET /tasks/{task_id}/observability
+marketing_agent/
+  agents/          Specialist agents and Creative Director
+  contracts/       Typed messages and campaign state
+  workflows/       LangGraph orchestration and result adapters
+  adapters/        Generation, editing, VQA, and OCR adapters
+  web/             User-facing workspace
+  api.py           FastAPI application
+  executor.py      Inline/external task execution
+  tools.py         Tool registry and capability restrictions
+benchmarks/        Fixed acceptance cases
+deploy/            Production configuration and service templates
+docs/              Architecture, acceptance, and operations notes
+scripts/           CLI, benchmark, acceptance, and setup commands
+tests/             Unit, workflow, API, security, and deployment tests
 ```
 
-生产配置通过 `MULTI_AGENT_MAX_NODE_ATTEMPTS` 和 `MULTI_AGENT_CHECKPOINTS`
-控制。详细的告警建议和恢复约定见 `docs/operations.md`。
-
-## 环境要求
+## Requirements and Installation
 
 - Python 3.10
-- NVIDIA GPU，推荐 80GB 显存
-- CUDA 12.x
-- 模型权重需放入 `runtime/models/`
+- CUDA 12.x for production tools
+- NVIDIA GPU; 80 GB VRAM is recommended for the complete local stack
 
-期望的模型目录：
+```bash
+python -m venv runtime/venv/gpu
+source runtime/venv/gpu/bin/activate
+pip install -r requirements/base.txt
+cp .env.example .env
+bash scripts/setup_model_envs.sh all
+```
+
+Expected model directories:
 
 ```text
 runtime/models/Qwen-Image/
@@ -139,333 +132,130 @@ runtime/models/grounding-dino-base/
 runtime/models/sam2/
 ```
 
-模型权重、第三方仓库、虚拟环境和实验输出不进入 Git。
+Weights, generated assets, datasets, environments, credentials, and runtime reports are excluded from Git.
 
-## 安装
+## Quick Start
+
+Run with development tools:
 
 ```bash
-python -m venv runtime/venv/gpu
-source runtime/venv/gpu/bin/activate
-pip install -r requirements/base.txt
-
-# 按需创建 PowerPaint 与 VQAScore/OCR 隔离环境
-bash scripts/setup_model_envs.sh all
+python scripts/run_multi_agent.py \
+  "Create a premium skincare launch poster titled Radiant Renewal" \
+  --formats 1:1 4:5 \
+  --review-required
 ```
 
-复制环境变量模板：
+Run with production adapters:
 
 ```bash
-cp .env.example .env
-```
-
-所有路径默认相对于项目根目录，也可以通过环境变量覆盖。
-
-## 运行测试
-
-```bash
-PYTHONPATH="$PWD" runtime/venv/gpu/bin/python -m pytest -q tests
-```
-
-当前测试基线：94 个测试通过。
-
-## 命令行运行
-
-```bash
-export MARKETING_AGENT_ROOT="$PWD"
-export PYTHONPATH="$PWD"
-
-runtime/venv/gpu/bin/python scripts/run_qwen_agent.py \
-  "生成一张高端护肤精华液商业海报" \
+python scripts/run_multi_agent.py \
+  "Create a premium skincare launch poster" \
   --production \
-  --quality-threshold 0.87 \
-  --max-iterations 8
+  --quality-threshold 0.80
 ```
 
-## 启动 API
+Production multi-agent mode requires `TYPOGRAPHY_FONT_PATH`. A real structured Brief/Strategy model can be configured with:
+
+```bash
+STRUCTURED_MODEL_BASE_URL=https://your-endpoint/v1
+STRUCTURED_MODEL_NAME=your-model
+STRUCTURED_MODEL_API_KEY=your-key
+```
+
+Without these values, deterministic specialist fallbacks are used.
+
+## API
 
 ```bash
 bash scripts/run_api.sh
 ```
 
-默认监听 `0.0.0.0:8000`。健康检查：
-
-```bash
-curl http://127.0.0.1:8000/health
-```
-
-### 品牌规范与结构化文案
-
-任务可直接携带品牌档案，不需要预先创建品牌数据库。Agent 会把品牌色、调性、
-必显/禁用文案、视觉规则和素材逻辑 ID 注入每轮生成，并在结果中返回结构化文案。
+Submit a multi-agent task:
 
 ```json
 {
-  "prompt": "生成高端精华活动海报，标题《奢润新生》",
-  "generate_copy": true,
-  "brand_profile": {
-    "brand_id": "lumiere",
-    "name": "LUMIÈRE",
-    "tone": ["高端", "克制"],
-    "primary_colors": ["象牙白", "香槟金"],
-    "required_phrases": ["焕亮新生"],
-    "forbidden_phrases": ["全网最低"],
-    "visual_rules": ["品牌名只能出现一次"]
-  }
+  "orchestration_mode": "multi_agent",
+  "prompt": "Create a premium serum campaign poster titled Radiant Renewal",
+  "output_formats": ["1:1", "4:5"],
+  "candidate_count": 2,
+  "review_required": true
 }
 ```
 
-不需要自动生成文案时传入 `"generate_copy": false`。
+Key endpoints:
 
-### Top-K 多候选生成
-
-通过 `candidate_count` 请求 2～8 个独立候选。每个候选使用可复现的独立种子，
-最终按“文字合规优先、营销评分其次”自动选择；结果中的 `candidate_summaries`
-保留所有候选的分数、合规状态和选中标记。
-
-```json
-{
-  "prompt": "生成高端精华活动海报",
-  "candidate_count": 3,
-  "seed": 42,
-  "parallel_candidates": false
-}
+```text
+POST /tasks
+GET  /tasks
+GET  /tasks/{task_id}
+GET  /tasks/{task_id}/events
+GET  /tasks/{task_id}/result
+POST /tasks/{task_id}/review
+GET  /tasks/{task_id}/observability
+GET  /health
 ```
 
-GPU 模式建议保持 `parallel_candidates=false`，避免多个扩散模型同时争用显存。
+The user workspace is available at `/app`; the experiment dashboard is available at `/dashboard` when authentication policy allows it.
 
-### 多尺寸渠道适配
+## Multi-Format, Candidates, and Human Review
 
-`output_formats` 支持 `1:1`、`4:5`、`9:16` 和 `16:9`。Agent 会针对每种
-画幅注入独立安全区规则并分别选出最佳候选，结果通过 `format_summaries` 返回。
+`candidate_count` requests 1–8 reproducible candidates. Selection prioritizes text and compliance requirements before marketing score.
 
-```json
-{
-  "prompt": "生成全渠道香水活动海报",
-  "output_formats": ["1:1", "4:5", "9:16", "16:9"],
-  "candidate_count": 2
-}
-```
+`output_formats` accepts `1:1`, `4:5`, `9:16`, and `16:9`. Each format receives an independent layout, safe-area policy, review cycle, and `FormatSummary`.
 
-以上请求会运行 4 个画幅 × 2 个候选。当前多尺寸仅支持文生图任务；图像编辑仍保持
-原图尺寸，防止 PowerPaint 在未重排版时产生拉伸结果。
-
-### 人工审核与恢复执行
-
-提交任务时设置 `"review_required": true`，Agent 完成候选选择后会进入
-`waiting_for_review`。预览结果已经持久化，但批准前不会写入案例记忆。
-
-批准交付：
+Set `review_required=true` to stop at the delivery gate. Feedback is classified and routed to the responsible agents:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/tasks/TASK_ID/review \
   -H 'Content-Type: application/json' \
-  -d '{"decision":"approve","reviewer":"creative_lead"}'
+  -d '{"decision":"revise","feedback":"Increase the product size and move the headline upward"}'
 ```
 
-带反馈修订：
+## Reliability and Observability
+
+Specialist nodes use bounded retries for transient timeout and connection failures. Every attempt records its agent, node, status, latency, error category, and estimated cost.
+
+Campaign state can be saved atomically after key nodes and restored with its brief, strategies, layouts, assets, evaluations, reviews, and remaining budget.
 
 ```bash
-curl -X POST http://127.0.0.1:8000/tasks/TASK_ID/review \
-  -H 'Content-Type: application/json' \
-  -d '{"decision":"revise","feedback":"产品放大到画面高度55%，标题上移"}'
+MULTI_AGENT_MAX_NODE_ATTEMPTS=2
+MULTI_AGENT_CHECKPOINTS=true
+MULTI_AGENT_CHECKPOINT_DIR=runtime/checkpoints
 ```
 
-修订会归档上一轮结果、使用新种子重新执行，并再次进入审核点。默认最多修订 3 轮，
-可通过 `max_review_rounds` 调整。审核历史保存在结果的 `review_history` 字段中。
+Task metrics are available from `GET /tasks/{task_id}/observability`. Cost fields are capacity-planning estimates, not provider invoices.
 
-### 实验与决策看板
+## Evaluation and Ablations
 
-API 启动后访问：
-
-```text
-http://127.0.0.1:8000/dashboard
-```
-
-看板直接读取任务目录，提供任务状态、平均最佳分、待审核队列、各画幅最佳图、
-Top-K 候选对比和 Agent 决策轨迹。机器可读汇总接口为：
-
-```text
-GET /dashboard/api/summary
-```
-
-任务详情页：
-
-```text
-GET /dashboard/tasks/{task_id}
-```
-
-生成图通过受限资产接口展示，接口只允许读取对应任务目录内且已登记在结果中的文件。
-
-### 模型 Worker 与 GPU 调度
-
-单张 80GB GPU 的生产部署默认使用一次性模型 Worker。VQAScore 和 OCR 串行执行，
-每个评估进程完成后立即退出并释放显存，避免两个评估模型叠加后 OOM；
-`QWEN_UNLOAD_AFTER_GENERATE=true` 也保证后续评估或修复生成能重新取得完整显存。
+Compare direct generation, the original single-agent loop, and the multi-agent system:
 
 ```bash
-MODEL_WORKER_MODE=oneshot
-MODEL_WORKER_TIMEOUT_SECONDS=900
-GPU_MAX_CONCURRENT=1
+python scripts/run_multi_agent_benchmark.py \
+  --system all \
+  --report runtime/multi_agent_benchmark.json
 ```
 
-所有真实 GPU 工具共享调度器，默认串行运行。`parallel_candidates=true` 只会并行准备
-候选，GPU 调用仍受 `GPU_MAX_CONCURRENT` 限制。调度状态可通过 `/health` 的
-`runtime.gpu_schedulers` 查看，包括当前活跃数、历史峰值和完成计数；每次 Observation
-的 `gpu_queue_seconds` 记录该次调用的排队时间。
-
-只有在评估模型总显存经过实测可以同时容纳时，才建议启用长驻 Worker 来减少冷加载：
+Run ablations:
 
 ```bash
-MODEL_WORKER_MODE=persistent
+python scripts/run_multi_agent_benchmark.py --system multi_agent --ablation no_parallel_strategy
+python scripts/run_multi_agent_benchmark.py --system multi_agent --ablation no_compliance
+python scripts/run_multi_agent_benchmark.py --system multi_agent --ablation no_structured_repair
 ```
 
-### 生产验收基准
+Reports include completion rate, average score, generation count, latency, Director rounds, and conflict count. Resume or publication claims should be reproduced with fixed model versions, fixed hardware, real tools, and human gold labels.
 
-`benchmarks/acceptance_cases.json` 提供 10 条固定营销生成案例，覆盖精确文字、
-单一主体、品牌唯一性、构图、材质和多类产品。验收脚本通过正式登录、任务队列、
-Worker、结果接口运行完整用户链路，并汇总通过率、耗时、自动修复次数和失败原因。
-
-先运行 3 条 smoke 案例：
+## Testing
 
 ```bash
-export ACCEPTANCE_EMAIL='acceptance@example.test'
-export ACCEPTANCE_PASSWORD='replace-with-a-test-secret'
-python scripts/run_acceptance.py --tag smoke \
-  --report runtime/acceptance_smoke_report.json
+PYTHONPATH="$PWD" python -m pytest -q tests
 ```
 
-不指定 `--tag` 时运行全部案例。还可使用 `--case-id serum_text_precision` 做单例复现。
-密码只从环境变量读取，不会写入报告或代码仓库。
+The suite covers contracts, routing, tools, model adapters, layout repair, human feedback, persistence, API behavior, authentication isolation, queues, provenance, observability, and deployment contracts.
 
-### 历史经验学习与策略记忆
+This README deliberately does not claim a current passing-test count until the final suite is rerun in a compatible environment.
 
-策略记忆记录“低分维度 → 修复动作 → 分数变化”，区别于保存成品参考的案例 RAG。
-只有带来有效提升的动作会进入后续推荐；失败动作只用于统计。人工审核任务在批准前
-不会学习。
-
-默认关闭且不会创建文件。需要跨任务持久化时启用：
-
-```bash
-EXPERIENCE_MEMORY_ENABLED=true
-EXPERIENCE_MEMORY_PATH=runtime/memory/experience.jsonl
-```
-
-查看当前累计经验和推荐策略：
-
-```text
-GET /experience/strategies
-```
-
-任务结果中的 `experience_used` 表示本次是否采用历史策略，
-`learned_experience_count` 表示本次新增了多少条可统计经验。
-
-### C2PA 内容溯源
-
-文生图使用 `c2pa.created` 和 `trainedAlgorithmicMedia`；AI 局部编辑使用
-`c2pa.edited` 和 `compositedWithTrainedAlgorithmicMedia`。公开清单只包含 prompt 的
-SHA-256，不包含原始 prompt、私钥内容或私钥路径。
-
-仅生成内部清单、不签名：
-
-```bash
-C2PA_MANIFEST_ONLY=true
-```
-
-生成可验证 Content Credentials：
-
-```bash
-C2PA_ENABLED=true
-C2PATOOL_PATH=/usr/local/bin/c2patool
-C2PA_SIGN_CERT_PATH=privatecredentials/c2pa_sign_cert.pem
-C2PA_PRIVATE_KEY_PATH=privatecredentials/c2pa_private_key.pem
-C2PA_SIGNING_ALGORITHM=es256
-```
-
-签名模式要求使用可信 X.509 证书链。签名完成后系统会立即调用 `c2patool --info`
-验证；失败时删除签名输出并令任务失败。官方工具内置的测试证书不得用于生产。
-人工审核任务只有批准后才执行 provenance 流程。
-
-任务结果通过 `content_credentials_status` 明确区分：
-
-- `not_enabled`
-- `manifest_only`
-- `signed_and_verified`
-
-每个渠道最佳资产的 manifest 和签名路径记录在 `provenance` 字段中。
-
-### 持久化任务队列与独立 Worker
-
-开发模式默认由 API 进程内执行任务。生产部署应让 API 只负责入队：
-
-```bash
-TASK_EXECUTION_MODE=external
-TASK_DATABASE_PATH=runtime/task_metadata.sqlite3
-TASK_QUEUE_PATH=runtime/task_queue.sqlite3
-```
-
-使用相同的环境变量启动独立 Worker：
-
-```bash
-python -m marketing_agent.worker
-```
-
-队列使用 SQLite WAL 和原子领取，API 重启不会丢失排队任务。Worker 异常退出后，
-超过 `WORKER_STALE_SECONDS`（默认 3600 秒）的运行中任务会在新 Worker 启动时重新入队。
-多个 Worker 可以共享队列，但每个 GPU Worker 应配置独立的 `CUDA_VISIBLE_DEVICES`。
-
-状态和队列接口：
-
-```text
-GET /tasks
-GET /tasks/{task_id}/events
-GET /health
-```
-
-`/health` 中的 `queue` 返回 queued、running、completed、failed 和 cancelled 数量。
-未来切换 Redis 时只需替换队列适配器，Agent 执行代码和 API 合同无需变化。
-
-### 用户 Web 工作台
-
-启动 API 后访问：
-
-```text
-http://127.0.0.1:8000/app
-```
-
-Web 工作台支持填写营销需求和品牌规则、上传产品图、选择候选数量和输出尺寸、
-查看任务状态与执行事件、预览和下载生成结果，以及批准或提交人工修改意见。
-根路径 `/` 会自动跳转到工作台；研发与实验看板仍保留在 `/dashboard`。
-
-### 用户、项目与数据隔离
-
-开发环境默认关闭认证。面向真实用户部署时启用：
-
-```bash
-AUTH_ENABLED=true
-AUTH_DATABASE_PATH=runtime/accounts.sqlite3
-AUTH_SECURE_COOKIE=true  # 仅在 HTTPS 入口下开启
-```
-
-开启后，Web 工作台提供注册、登录和退出；注册会自动创建默认项目。密码使用带独立随机盐的
-PBKDF2-SHA256 保存，登录凭据存放在 HttpOnly、SameSite=Strict Cookie 中。任务、上传素材、
-执行事件、结果和下载接口全部校验资源所有者，其他用户访问时统一返回 404。
-
-认证接口：
-
-```text
-POST /auth/register
-POST /auth/login
-POST /auth/logout
-GET  /auth/me
-GET  /projects
-POST /projects
-```
-
-认证开启时，全局研发看板和共享记忆管理接口默认禁用，避免跨用户数据泄露。
-
-### 生产部署
-
-复制并检查生产配置：
+## Production Deployment
 
 ```bash
 cp deploy/production.env.example deploy/production.env
@@ -473,29 +263,37 @@ deploy/manage.sh start
 deploy/manage.sh status
 ```
 
-停止或重启：
+The deployment separates FastAPI from the GPU worker, uses a durable SQLite WAL queue, limits GPU concurrency, and supports stale-job recovery. Systemd templates and an Nginx HTTPS example are included under `deploy/`.
+
+For multi-host deployments, replace SQLite with Redis or another centralized broker while keeping executor and API contracts unchanged.
+
+## Authentication and Provenance
 
 ```bash
-deploy/manage.sh stop
-deploy/manage.sh restart
+AUTH_ENABLED=true
+AUTH_DATABASE_PATH=runtime/accounts.sqlite3
+AUTH_SECURE_COOKIE=true
 ```
 
-脚本分别启动 API 和独立 GPU Worker，保存 PID 与日志，等待 `/health` 通过后才报告成功；
-停止时会校验 PID 对应的命令，避免误杀其他进程。真实 `production.env` 已被 Git 忽略。
+Passwords use salted PBKDF2-SHA256. Session tokens are stored as hashes and delivered through HttpOnly, SameSite cookies. Task, event, result, asset, review, and observability endpoints enforce ownership.
 
-长期运行可以执行 `deploy/render_systemd.sh` 生成 systemd unit，人工检查后再安装。
-`deploy/nginx.conf.example` 提供 HTTPS 反向代理模板。启用 HTTPS 后应把
-`AUTH_SECURE_COOKIE` 改为 `true`。
+The optional provenance pipeline creates prompt-hash manifests and can sign assets through `c2patool`. `manifest_only` and `signed_and_verified` are reported separately; test certificates must not be used in production.
 
-## 当前限制
+## Current Limitations
 
-- 开启 `QWEN_UNLOAD_AFTER_GENERATE=true` 会减少显存占用，但多轮生成需要重新加载 Qwen。
-- SQLite 队列适合单机部署；多服务器部署应切换 Redis 或其他集中式消息队列。
-- 扩散模型无法保证每次生成的文字完全正确，OCR 负责检测但不保证修复成功。
-- PowerPaint 只应用于图生图/局部编辑任务，文生图失败时默认重新生成。
+- The full pipeline requires a compatible CUDA/GPU environment and separately downloaded weights.
+- SQLite targets single-host deployment; multi-host workers require a centralized queue.
+- Diffusion models cannot guarantee perfect text; OCR detects failures but cannot guarantee repair.
+- PowerPaint targets image-editing and local-repair tasks; text-to-image failures may require regeneration.
+- Checkpoint storage exists, while automatic node-level worker resume still requires lease integration.
+- Reported node costs are estimates until connected to billing or measured GPU accounting.
 
-## 安全与发布
+## Security
 
-- 不要提交 `.env`、模型权重、数据集、日志、生成图片或凭据。
-- 上传前运行 `git status --short` 和测试。
-- 本项目不包含模型权重；使用模型时请遵守各模型许可证。
+- Never commit `.env` files, credentials, model weights, datasets, logs, or generated assets.
+- Run the test suite and inspect `git status --short` before release.
+- This repository does not redistribute model weights; review each model license before use.
+
+## License
+
+Apache-2.0. See [LICENSE](LICENSE).
